@@ -1,0 +1,8 @@
+- route:
+    from:
+      uri: timer:tick
+      parameters:
+        period: 10000
+      steps:
+        - log:
+            message: "🔥 GitOps route is running OK at ${date:now:yyyy-MM-dd HH:mm:ss}"
