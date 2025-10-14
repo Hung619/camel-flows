@@ -9,4 +9,4 @@
       steps:
         - log:
             id: log-199e
-            message: 🔥 GitOpss route is running OK at ${date:now:yyyy-MM-dd HH:mm:ss}
+            message: 🔥 GitOpsss route is running OK at ${date:now:yyyy-MM-dd HH:mm:ss}
