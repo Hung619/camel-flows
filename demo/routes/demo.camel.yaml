@@ -1,0 +1,103 @@
+- route:
+    from:
+      uri: timer:period
+      steps:
+        - log:
+            message: "🚀 Bắt đầu chu kỳ polling dữ liệu từ ARAS..."
+        - to: direct:getArasToken
+        - setHeader:
+            name: Authorization
+            simple: "Bearer ${body}"
+        - setBody:
+            constant: ""
+        - setHeader:
+            name: Cookie
+            expression:
+              constant:
+                expression: >-
+                  Aras.Server.Session=CfDJ8Oizhveh66tFnrQPkReDZ2phGDDXCFwoMlOoJDJu%2BwdpEd9a0tC5WIBSPfWfN3%2F9hMadRq1pzmv4%2FanbkMxYaOUYDiJHKUOfHdN42s2UZ5bGupBmmUmnDbCt3rr%2FUussCxBkPMe3VK4lTNUxx2lfP4I1Ec%2FdzfDOphKLJ%2FdzH%2FkZ
+        - log:
+            message: "📤 Headers gửi sang ARAS: ${headers}"
+        - toD:
+            uri: "https://aras.tuilakhanh.id.vn/InnovatorServer/server/odata/Part?$top=10&$count=false"
+        - log:
+            message: |
+              🧾 Body nhận từ ARAS:
+              ${body}
+        - split:
+            expression:
+              jsonpath:
+                expression: $.value[*]
+            steps:
+              - marshal:
+                  json:
+                    library: Jackson       
+              - log:
+                  message: 'Đang xử lý Part: ${body}'
+              - toD:
+                  uri: atlasmap:mappings/aras-to-erpnext.adm
+              - setHeader:
+                  name: Authorization
+                  constant: token YOUR_ERP_API_KEY:YOUR_ERP_API_SECRET
+              - setHeader:
+                  name: Content-Type
+                  constant: application/json
+              - toD:
+                  uri: http://localhost:8080/api/resource/Item
+- route:
+    from:
+      uri: direct:getArasToken
+      steps:
+        - setBody:
+            expression:
+              constant:
+                expression: >-
+                  grant_type=password&scope=openid Innovator
+                  offline_access&client_id=InnovatorClient&username=admin&password=innovator&database=InnovatorSolutionss
+        - setHeader:
+            name: Content-Type
+            expression:
+              constant:
+                expression: application/x-www-form-urlencoded
+        - setHeader:
+            name: Cookie
+            expression:
+              constant:
+                expression: >-
+                  Aras.Server.Session=CfDJ8Oizhveh66tFnrQPkReDZ2phGDDXCFwoMlOoJDJu%2BwdpEd9a0tC5WIBSPfWfN3%2F9hMadRq1pzmv4%2FanbkMxYaOUYDiJHKUOfHdN42s2UZ5bGupBmmUmnDbCt3rr%2FUussCxBkPMe3VK4lTNUxx2lfP4I1Ec%2FdzfDOphKLJ%2FdzH%2FkZ
+        - toD:
+            uri: >-
+              https://aras.tuilakhanh.id.vn/InnovatorServer/OAuthServer/connect/token
+        - unmarshal:
+            json:
+              library: Jackson
+        - setBody:
+            simple: "${body[access_token]}"
+- rest:
+    path: /api/resource
+    post:
+      - path: /Item
+        consumes: application/json
+        produces: application/json
+        to: direct:fake-erpnext
+
+- route:
+    from:
+      uri: direct:fake-erpnext
+      steps:
+        - log:
+            message: |
+              📥 [Fake ERPNext] Nhận dữ liệu:
+              Body: ${body}
+              Headers: ${headers}
+        - setBody:
+            constant: |
+              {
+                "data": {
+                  "message": "Fake ERPNext nhận dữ liệu thành công",
+                  "timestamp": "${date:now:yyyy-MM-dd HH:mm:ss}"
+                }
+              }
+        - marshal:
+            json:
+              library: Jackson
