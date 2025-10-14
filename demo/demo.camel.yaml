@@ -9,4 +9,4 @@
       steps:
         - log:
             id: log-0a7f
-            message: Dạ em chào aLong :)) ${date:now:yyyy-MM-dd HH:mm:ss}
+            message: Dạ em chào aLong  ${date:now:yyyy-MM-dd HH:mm:ss}
