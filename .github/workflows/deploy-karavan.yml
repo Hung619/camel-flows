@@ -1,0 +1,29 @@
+name: 🚀 Deploy Camel Karavan Runtime
+
+on:
+  push:
+    branches:
+      - main   # hoặc nhánh bạn muốn auto deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to remote Karavan Runtime
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            cd /home/${{ secrets.DEPLOY_USER }}/karavan-runtime
+            echo "🌀 Pull latest code..."
+            git pull origin main
+            echo "♻️ Restart containers..."
+            docker compose down
+            docker compose up -d
+            echo "✅ Deployment completed!"
