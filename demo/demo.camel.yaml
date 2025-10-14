@@ -1,8 +1,12 @@
 - route:
+    id: route-186d
     from:
-      uri: timer:tick
+      id: from-3c94
+      uri: timer
       parameters:
         period: 10000
+        timerName: tick
       steps:
         - log:
-            message: "🔥 GitOps route is running OK at ${date:now:yyyy-MM-dd HH:mm:ss}"
+            id: log-0a7f
+            message: 🔥 GitOpss route is running OK at ${date:now:yyyy-MM-dd HH:mm:ss}
