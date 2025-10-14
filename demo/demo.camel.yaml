@@ -9,4 +9,4 @@
       steps:
         - log:
             id: log-0a7f
-            message: đã reload!!!  ${date:now:yyyy-MM-dd HH:mm:ss}
+            message: đã reload  ${date:now:yyyy-MM-dd HH:mm:ss}
