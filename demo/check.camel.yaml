@@ -1,0 +1,9 @@
+- route:
+    id: route-3c55
+    nodePrefixId: route-89c
+    from:
+      id: from-3805
+      description: vcbvcb
+      uri: kamelet:aws-cloudtrail-source
+      parameters:
+        region: ca-central-1
