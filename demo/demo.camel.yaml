@@ -9,4 +9,4 @@
       steps:
         - log:
             id: log-0a7f
-            message: ✅ ay oy ${date:now:yyyy-MM-dd HH:mm:ss}
+            message: ✅ ay oyy ${date:now:yyyy-MM-dd HH:mm:ss}
