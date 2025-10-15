@@ -1,12 +1,19 @@
 - route:
     id: route-186d
     from:
-      id: from-4c5c
+      id: from-f821
       uri: timer
       parameters:
-        period: 10000
-        timerName: tick
-    steps:
-      - undefined:
-          log:
-            message: ✅ ay oyy ${date:now:yyyy-MM-dd HH:mm:ss}
+        timerName: //tick?period=10s
+      steps:
+        - setBody:
+            id: setBody-1562
+            expression:
+              constant:
+                id: constant-2158
+                expression: Hello from Camel!
+        - to:
+            id: to-f84c
+            uri: log
+            parameters:
+              loggerName: demo
