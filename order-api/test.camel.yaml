@@ -1,4 +1,49 @@
 - route:
+    id: route-c873
+    from:
+      id: from-2997
+      uri: direct
+      parameters:
+        name: getArasToken
+      steps:
+        - setBody:
+            id: setBody-7e69
+            expression:
+              constant:
+                id: constant-9570
+                expression: >-
+                  grant_type=password&scope=openid Innovator
+                  offline_access&client_id=InnovatorClient&username=admin&password=innovator&database=InnovatorSolutionss
+        - setHeader:
+            id: setHeader-58d3
+            name: Content-Type
+            expression:
+              constant:
+                id: constant-082a
+                expression: application/x-www-form-urlencoded
+        - setHeader:
+            id: setHeader-1636
+            name: Cookie
+            expression:
+              constant:
+                id: constant-9d0b
+                expression: >-
+                  Aras.Server.Session=CfDJ8Oizhveh66tFnrQPkReDZ2phGDDXCFwoMlOoJDJu%2BwdpEd9a0tC5WIBSPfWfN3%2F9hMadRq1pzmv4%2FanbkMxYaOUYDiJHKUOfHdN42s2UZ5bGupBmmUmnDbCt3rr%2FUussCxBkPMe3VK4lTNUxx2lfP4I1Ec%2FdzfDOphKLJ%2FdzH%2FkZ
+        - toD:
+            id: toD-b5cb
+            uri: >-
+              https://aras.tuilakhanh.id.vn/InnovatorServer/OAuthServer/connect/token
+        - unmarshal:
+            id: unmarshal-c814
+            json:
+              id: json-44d8
+        - setBody:
+            id: setBody-687e
+            expression:
+              simple:
+                id: simple-38db
+                expression: ${body[access_token]}
+- route:
     id: route-db7f
     from:
       id: from-bc15
@@ -102,48 +147,3 @@
             id: 111111
             message: |
               GỬI THÀNH CÔNG!!
-- route:
-    id: route-c873
-    from:
-      id: from-2997
-      uri: direct
-      parameters:
-        name: getArasToken
-      steps:
-        - setBody:
-            id: setBody-7e69
-            expression:
-              constant:
-                id: constant-9570
-                expression: >-
-                  grant_type=password&scope=openid Innovator
-                  offline_access&client_id=InnovatorClient&username=admin&password=innovator&database=InnovatorSolutionss
-        - setHeader:
-            id: setHeader-58d3
-            name: Content-Type
-            expression:
-              constant:
-                id: constant-082a
-                expression: application/x-www-form-urlencoded
-        - setHeader:
-            id: setHeader-1636
-            name: Cookie
-            expression:
-              constant:
-                id: constant-9d0b
-                expression: >-
-                  Aras.Server.Session=CfDJ8Oizhveh66tFnrQPkReDZ2phGDDXCFwoMlOoJDJu%2BwdpEd9a0tC5WIBSPfWfN3%2F9hMadRq1pzmv4%2FanbkMxYaOUYDiJHKUOfHdN42s2UZ5bGupBmmUmnDbCt3rr%2FUussCxBkPMe3VK4lTNUxx2lfP4I1Ec%2FdzfDOphKLJ%2FdzH%2FkZ
-        - toD:
-            id: toD-b5cb
-            uri: >-
-              https://aras.tuilakhanh.id.vn/InnovatorServer/OAuthServer/connect/token
-        - unmarshal:
-            id: unmarshal-c814
-            json:
-              id: json-44d8
-        - setBody:
-            id: setBody-687e
-            expression:
-              simple:
-                id: simple-38db
-                expression: ${body[access_token]}
