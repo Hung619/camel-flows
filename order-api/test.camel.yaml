@@ -142,7 +142,7 @@
               id: json-de2a
         - toD:
             id: toD-4d63
-            uri: http://imes-1.localhost:8000/api/resource/Item
+            uri: https://imes-1.localhost:8000/api/resource/Item
         - log:
             id: 111111
             message: |
