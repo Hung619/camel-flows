@@ -91,6 +91,10 @@
               constant:
                 id: constant-fb1a
                 expression: application/json
+        - marshal:
+            id: marshal-e939
+            json:
+              id: json-de2a
         - toD:
             id: toD-4d63
             uri: http://localhost:8080/api/resource/Item
