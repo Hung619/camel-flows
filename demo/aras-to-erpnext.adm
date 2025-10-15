@@ -1,0 +1,102 @@
+{
+  "AtlasMapping": {
+    "jsonType": "io.atlasmap.v2.AtlasMapping",
+    "dataSource": [
+      {
+        "jsonType": "io.atlasmap.json.v2.JsonDataSource",
+        "id": "source-json-aras",
+        "name": "ARAS Part (Source)",
+        "description": "Source JSON document from ARAS OData",
+        "uri": "atlas:json:source-json-aras",
+        "dataSourceType": "SOURCE"
+      },
+      {
+        "jsonType": "io.atlasmap.json.v2.JsonDataSource",
+        "id": "target-json-erpnext",
+        "name": "ERPNext Item (Target)",
+        "description": "Target JSON document for ERPNext",
+        "uri": "atlas:json:target-json-erpnext",
+        "dataSourceType": "TARGET"
+      }
+    ],
+    "mappings": {
+      "mapping": [
+        {
+          "jsonType": "io.atlasmap.v2.Mapping",
+          "mappingType": "COLLECTION",
+          "inputField": [
+            {
+              "jsonType": "io.atlasmap.json.v2.JsonField",
+              "docId": "source-json-aras",
+              "path": "/value<>",
+              "fieldType": "COMPLEX"
+            }
+          ],
+          "outputField": [
+            {
+              "jsonType": "io.atlasmap.json.v2.JsonField",
+              "docId": "target-json-erpnext",
+              "path": "/items<>",
+              "fieldType": "COMPLEX"
+            }
+          ],
+          "mappings": {
+            "mapping": [
+              {
+                "jsonType": "io.atlasmap.v2.Mapping",
+                "mappingType": "MAP",
+                "inputField": [ { "jsonType": "io.atlasmap.json.v2.JsonField", "docId": "source-json-aras", "path": "/item_number" } ],
+                "outputField": [ { "jsonType": "io.atlasmap.json.v2.JsonField", "docId": "target-json-erpnext", "path": "/item_code" } ]
+              },
+              {
+                "jsonType": "io.atlasmap.v2.Mapping",
+                "mappingType": "MAP",
+                "inputField": [ { "jsonType": "io.atlasmap.json.v2.JsonField", "docId": "source-json-aras", "path": "/name" } ],
+                "outputField": [ { "jsonType": "io.atlasmap.json.v2.JsonField", "docId": "target-json-erpnext", "path": "/item_name" } ]
+              },
+              {
+                "jsonType": "io.atlasmap.v2.Mapping",
+                "mappingType": "MAP",
+                "inputField": [ { "jsonType": "io.atlasmap.json.v2.JsonField", "docId": "source-json-aras", "path": "/description" } ],
+                "outputField": [ { "jsonType": "io.atlasmap.json.v2.JsonField", "docId": "target-json-erpnext", "path": "/description" } ]
+              },
+              {
+                "jsonType": "io.atlasmap.v2.Mapping",
+                "mappingType": "MAP",
+                "inputField": [ { "jsonType": "io.atlasmap.json.v2.JsonField", "docId": "source-json-aras", "path": "/classification" } ],
+                "outputField": [ { "jsonType": "io.atlasmap.json.v2.JsonField", "docId": "target-json-erpnext", "path": "/item_group" } ]
+              },
+              {
+                "jsonType": "io.atlasmap.v2.Mapping",
+                "mappingType": "MAP",
+                "inputField": [ { "jsonType": "io.atlasmap.json.v2.JsonField", "docId": "source-json-aras", "path": "/unit" } ],
+                "outputField": [ { "jsonType": "io.atlasmap.json.v2.JsonField", "docId": "target-json-erpnext", "path": "/stock_uom" } ]
+              },
+              {
+                "jsonType": "io.atlasmap.v2.Mapping",
+                "mappingType": "MAP",
+                "expression": "If(Equals(${0}, 'Buy'), true, false)",
+                "inputField": [ { "jsonType": "io.atlasmap.json.v2.JsonField", "docId": "source-json-aras", "path": "/make_buy" } ],
+                "outputField": [ { "jsonType": "io.atlasmap.json.v2.JsonField", "docId": "target-json-erpnext", "path": "/is_purchase_item" } ]
+              },
+              {
+                "jsonType": "io.atlasmap.v2.Mapping",
+                "mappingType": "MAP",
+                "inputField": [ { "jsonType": "io.atlasmap.v2.ConstantField", "value": "true", "fieldType": "BOOLEAN" } ],
+                "outputField": [ { "jsonType": "io.atlasmap.json.v2.JsonField", "docId": "target-json-erpnext", "path": "/is_sales_item" } ]
+              },
+              {
+                "jsonType": "io.atlasmap.v2.Mapping",
+                "mappingType": "MAP",
+                "expression": "If(Equals(${0}, 'Released'), 0, 1)",
+                "inputField": [ { "jsonType": "io.atlasmap.json.v2.JsonField", "docId": "source-json-aras", "path": "/state" } ],
+                "outputField": [ { "jsonType": "io.atlasmap.json.v2.JsonField", "docId": "target-json-erpnext", "path": "/disabled" } ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "name": "aras-to-erpnext.adm"
+  }
+}
