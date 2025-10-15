@@ -58,7 +58,7 @@
               groovy:
                 id: groovy-613a
                 expression: |
-                  def input = context.bodyAs(Map.class)
+                  def input = exchange.message.body
                   def parts = input.value.collect { it ->
                       [
                           item_code: it.item_number,
@@ -66,7 +66,7 @@
                           description: it.description,
                           item_group: it.classification,
                           stock_uom: it.unit,
-                          is_purchase_item: it.make_buy == "Buy",
+                          is_purchase_item: (it.make_buy == "Buy"),
                           is_sales_item: true,
                           disabled: (it.state == "Released" ? 0 : 1)
                       ]
