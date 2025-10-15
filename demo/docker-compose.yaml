@@ -1,0 +1,8 @@
+services:
+  demo:
+    image: demo
+    restart: always
+    ports:
+      - "8079:8080"
+    networks:
+      - karavan
