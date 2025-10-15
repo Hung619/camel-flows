@@ -1,12 +1,12 @@
 - route:
     id: route-186d
     from:
-      id: from-3c94
+      id: from-4c5c
       uri: timer
       parameters:
         period: 10000
         timerName: tick
-      steps:
-        - log:
-            id: log-0a7f
+    steps:
+      - undefined:
+          log:
             message: ✅ ay oyy ${date:now:yyyy-MM-dd HH:mm:ss}
