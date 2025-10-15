@@ -1,12 +1,3 @@
-- rest:
-    id: rest-3902
-    path: /api/resource
-    post:
-      - id: post-809d
-        path: /Item
-        to: direct:fake-erpnext
-        consumes: application/json
-        produces: application/json
 - route:
     id: route-db7f
     from:
@@ -66,9 +57,15 @@
                           description: it.description,
                           item_group: it.classification,
                           stock_uom: it.unit,
-                          is_purchase_item: (it.make_buy == "Buy"),
-                          is_sales_item: true,
-                          disabled: (it.state == "Released" ? 0 : 1)
+                          is_purchase_item: (it.make_buy == "Buy" ? 1 : 0),
+                          disabled: (it.state == "Released" ? 0 : 1),
+                          is_stock_item: 1,
+                          is_sales_item: 1,
+                          include_item_in_manufacturing: 1,
+                          allow_negative_stock: 0,
+                          country_of_origin: "Vietnam",
+                          default_material_request_type: "Purchase",
+                          end_of_life: "2099-12-31"
                       ]
                   }
                   return [items: parts]
@@ -78,18 +75,21 @@
               🔄 Dữ liệu sau khi transform:
               ${body}
         - setHeader:
-            id: setHeader-bc43
-            name: Authorization
+            id: 1111
+            name: Cookie
             expression:
               constant:
-                id: constant-43c6
-                expression: token YOUR_ERP_API_KEY:YOUR_ERP_API_SECRET
+                id: constant-79b0
+                expression: >-
+                  full_name=Administrator;
+                  sid=88e0da2fc2ba7407af6823aa1142e969e50e0e2321d85e970edbc765;
+                  system_user=yes; user_id=Administrator; user_image=
         - setHeader:
-            id: setHeader-60b7
+            id: 2222
             name: Content-Type
             expression:
               constant:
-                id: constant-fb1a
+                id: constant-aefd
                 expression: application/json
         - marshal:
             id: marshal-e939
@@ -97,7 +97,11 @@
               id: json-de2a
         - toD:
             id: toD-4d63
-            uri: http://localhost:8080/api/resource/Item
+            uri: http://imes-1.localhost:8000/api/resource/Item
+        - log:
+            id: 111111
+            message: |
+              GỬI THÀNH CÔNG:
 - route:
     id: route-c873
     from:
@@ -143,33 +147,3 @@
               simple:
                 id: simple-38db
                 expression: ${body[access_token]}
-- route:
-    id: route-d9a6
-    from:
-      id: from-fa4e
-      uri: direct
-      parameters:
-        name: fake-erpnext
-      steps:
-        - log:
-            id: log-f934
-            message: |
-              📥 [Fake ERPNext] Nhận dữ liệu:
-              Body: ${body}
-              Headers: ${headers}
-        - setBody:
-            id: setBody-5062
-            expression:
-              constant:
-                id: constant-9bb4
-                expression: |
-                  {
-                    "data": {
-                      "message": "Fake ERPNext nhận dữ liệu thành công",
-                      "timestamp": "${date:now:yyyy-MM-dd HH:mm:ss}"
-                    }
-                  }
-        - marshal:
-            id: marshal-50a4
-            json:
-              id: json-c08c
