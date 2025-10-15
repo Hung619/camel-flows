@@ -1,7 +1,7 @@
 - route:
     id: route-c873
     from:
-      id: from-2997
+      id: from-db3a
       uri: direct
       parameters:
         name: getArasToken
