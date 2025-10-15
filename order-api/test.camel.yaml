@@ -14,6 +14,7 @@
       uri: timer
       parameters:
         timerName: period
+        period: 60s
       steps:
         - log:
             id: log-eb3f
@@ -28,19 +29,16 @@
             name: Authorization
             expression:
               simple:
-                id: simple-bc19
+                id: simple-6739
                 expression: Bearer ${body}
         - setHeader:
             id: setHeader-506e
             name: Cookie
             expression:
               constant:
-                id: constant-7e55
+                id: constant-9589
                 expression: >-
                   Aras.Server.Session=CfDJ8Oizhveh66tFnrQPkReDZ2phGDDXCFwoMlOoJDJu%2BwdpEd9a0tC5WIBSPfWfN3%2F9hMadRq1pzmv4%2FanbkMxYaOUYDiJHKUOfHdN42s2UZ5bGupBmmUmnDbCt3rr%2FUussCxBkPMe3VK4lTNUxx2lfP4I1Ec%2FdzfDOphKLJ%2FdzH%2FkZ
-        - log:
-            id: log-55fb
-            message: "📤 Headers gửi sang ARAS: ${headers}"
         - toD:
             id: toD-a780
             uri: >-
@@ -50,106 +48,129 @@
             message: |
               🧾 Body nhận từ ARAS:
               ${body}
-        - split:
-            id: split-eb96
+        - unmarshal:
+            id: unmarshal-9d23
+            json:
+              id: json-c592
+        - setBody:
+            id: transform-json
             expression:
-              jsonpath:
-                id: jsonpath-50e4
-                expression: $.value[*]
-            steps:
-              - marshal:
-                  id: marshal-b1bd
-                  json:
-                    id: json-d3d3
-                    library: Jackson
-              - log:
-                  id: log-c573
-                  message: "Đang xử lý Part: ${body}"
-              - toD:
-                  id: toD-99e3
-                  uri: atlasmap:aras-to-erpnext.adm
-              - setHeader:
-                  id: setHeader-bc43
-                  name: Authorization
-                  expression:
-                    constant:
-                      id: constant-fa88
-                      expression: token YOUR_ERP_API_KEY:YOUR_ERP_API_SECRET
-              - setHeader:
-                  id: setHeader-60b7
-                  name: Content-Type
-                  expression:
-                    constant:
-                      id: constant-d043
-                      expression: application/json
-              - toD:
-                  id: toD-4d63
-                  uri: http://localhost:8080/api/resource/Item
+              groovy:
+                id: groovy-e19c
+                expression: |
+                  def input = context.bodyAs(Map.class)
+                  def parts = input.value.collect { it ->
+                      [
+                          item_code: it.item_number,
+                          item_name: it.name,
+                          description: it.description,
+                          item_group: it.classification,
+                          stock_uom: it.unit,
+                          is_purchase_item: it.make_buy == "Buy",
+                          is_sales_item: true,
+                          disabled: (it.state == "Released" ? 0 : 1)
+                      ]
+                  }
+                  return [items: parts]
+            jsonata: |
+              {
+                "items": value[].{
+                  "item_code": item_number,
+                  "item_name": name,
+                  "description": description,
+                  "item_group": classification,
+                  "stock_uom": unit,
+                  "is_purchase_item": make_buy = "Buy" ? true : false,
+                  "is_sales_item": true,
+                  "disabled": state = "Released" ? 0 : 1
+                }
+              }
+        - log:
+            id: log-transformed
+            message: |
+              🔄 Dữ liệu sau khi transform:
+              ${body}
+        - setHeader:
+            id: setHeader-bc43
+            name: Authorization
+            expression:
+              constant:
+                id: constant-43c6
+                expression: token YOUR_ERP_API_KEY:YOUR_ERP_API_SECRET
+        - setHeader:
+            id: setHeader-60b7
+            name: Content-Type
+            expression:
+              constant:
+                id: constant-fb1a
+                expression: application/json
+        - toD:
+            id: toD-4d63
+            uri: http://localhost:8080/api/resource/Item
 - route:
     id: route-c873
     from:
-      id: from-2ca0
+      id: from-2997
       uri: direct
       parameters:
         name: getArasToken
       steps:
         - setBody:
-            id: setBody-6e68
+            id: setBody-7e69
             expression:
               constant:
-                id: constant-9936
+                id: constant-9570
                 expression: >-
                   grant_type=password&scope=openid Innovator
                   offline_access&client_id=InnovatorClient&username=admin&password=innovator&database=InnovatorSolutionss
         - setHeader:
-            id: setHeader-572f
+            id: setHeader-58d3
             name: Content-Type
             expression:
               constant:
-                id: constant-e396
+                id: constant-082a
                 expression: application/x-www-form-urlencoded
         - setHeader:
-            id: setHeader-ea94
+            id: setHeader-1636
             name: Cookie
             expression:
               constant:
-                id: constant-ee25
+                id: constant-9d0b
                 expression: >-
                   Aras.Server.Session=CfDJ8Oizhveh66tFnrQPkReDZ2phGDDXCFwoMlOoJDJu%2BwdpEd9a0tC5WIBSPfWfN3%2F9hMadRq1pzmv4%2FanbkMxYaOUYDiJHKUOfHdN42s2UZ5bGupBmmUmnDbCt3rr%2FUussCxBkPMe3VK4lTNUxx2lfP4I1Ec%2FdzfDOphKLJ%2FdzH%2FkZ
         - toD:
-            id: toD-e320
+            id: toD-b5cb
             uri: >-
               https://aras.tuilakhanh.id.vn/InnovatorServer/OAuthServer/connect/token
         - unmarshal:
-            id: unmarshal-f05f
+            id: unmarshal-c814
             json:
-              id: json-1d44
-              library: Jackson
+              id: json-44d8
         - setBody:
-            id: setBody-4066
+            id: setBody-687e
             expression:
               simple:
-                id: simple-c5d5
+                id: simple-38db
                 expression: ${body[access_token]}
 - route:
     id: route-d9a6
     from:
-      id: from-4fb3
+      id: from-fa4e
       uri: direct
       parameters:
         name: fake-erpnext
       steps:
         - log:
-            id: log-1bf8
+            id: log-f934
             message: |
               📥 [Fake ERPNext] Nhận dữ liệu:
               Body: ${body}
               Headers: ${headers}
         - setBody:
-            id: setBody-ef5f
+            id: setBody-5062
             expression:
               constant:
-                id: constant-5b92
+                id: constant-9bb4
                 expression: |
                   {
                     "data": {
@@ -158,7 +179,6 @@
                     }
                   }
         - marshal:
-            id: marshal-b1c9
+            id: marshal-50a4
             json:
-              id: json-794a
-              library: Jackson
+              id: json-c08c
