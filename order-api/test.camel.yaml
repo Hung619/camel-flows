@@ -101,7 +101,7 @@
         - log:
             id: 111111
             message: |
-              GỬI THÀNH CÔNG:
+              GỬI THÀNH CÔNG!!
 - route:
     id: route-c873
     from:
