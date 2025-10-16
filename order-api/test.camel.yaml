@@ -11,12 +11,9 @@
             expression:
               constant:
                 id: constant-9570
-                expression: |-
-                  grant_type=password&scope=openid Innovator offline_access&
-                    client_id=InnovatorClient&
-                    username=${properties:aras.username}&
-                    password=${properties:aras.password}&
-                    database=${properties:aras.database}
+                expression: >-
+                  grant_type=password&scope=openid Innovator
+                  offline_access&client_id=InnovatorClient&username=${properties:aras.username}&password=${properties:aras.password}&database=${properties:aras.database}       
         - setHeader:
             id: setHeader-58d3
             name: Content-Type
