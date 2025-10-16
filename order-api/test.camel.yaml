@@ -13,7 +13,7 @@
                 id: constant-9570
                 expression: >-
                   grant_type=password&scope=openid Innovator
-                  offline_access&client_id=InnovatorClient&username=${properties:aras.username}&password=${properties:aras.password}&database=${properties:aras.database}       
+                  offline_access&client_id=InnovatorClient&username=admin&password=innovator&database=InnovatorSolutionss
         - setHeader:
             id: setHeader-58d3
             name: Content-Type
@@ -27,8 +27,7 @@
             expression:
               constant:
                 id: constant-9d0b
-                expression: >-
-                  Aras.Server.Session=CfDJ8Oizhveh66tFnrQPkReDZ2phGDDXCFwoMlOoJDJu%2BwdpEd9a0tC5WIBSPfWfN3%2F9hMadRq1pzmv4%2FanbkMxYaOUYDiJHKUOfHdN42s2UZ5bGupBmmUmnDbCt3rr%2FUussCxBkPMe3VK4lTNUxx2lfP4I1Ec%2FdzfDOphKLJ%2FdzH%2FkZ
+                expression: ${properties:aras.cookie}
         - toD:
             id: toD-b5cb
             uri: >-
@@ -43,6 +42,73 @@
               simple:
                 id: simple-38db
                 expression: ${body[access_token]}
+- route:
+    id: route-
+    from:
+      id: 12311
+      uri: direct
+      parameters:
+        name: loginERPNext
+      steps:
+        - log:
+            id: log-erpnext-login-start
+            message: 🔐 Đăng nhập ERPNext...
+        - setBody:
+            id: setBody-erpnext-credentials
+            expression:
+              constant:
+                id: constant-5422
+                expression: |
+                  usr=Administrator&pwd=admin
+        - setHeader:
+            id: setHeader-erpnext-content-type
+            name: Content-Type
+            expression:
+              constant:
+                id: constant-d47a
+                expression: application/x-www-form-urlencoded
+        - removeHeaders:
+            id: removeHeaders-clean-before-login
+            pattern: "*"
+            excludePattern: Content-Type
+        - toD:
+            id: toD-erpnext-login
+            uri: https://dev-erpnext.imespro.ai/api/method/login
+        - script:
+            id: script-58ad
+            expression:
+              groovy:
+                id: groovy-014f
+                expression: |-
+                  // Lấy Set-Cookie header
+                                def cookies = exchange.in.getHeader("Set-Cookie")
+
+                                def sid = ""
+                                if (cookies) {
+                                    if (cookies instanceof List) {
+                                        cookies.each { c ->
+                                            def matcher = (c =~ /sid=([^;]+)/)
+                                            if (matcher.find()) sid = matcher.group(1)
+                                        }
+                                    } else {
+                                        def matcher = (cookies =~ /sid=([^;]+)/)
+                                        if (matcher.find()) sid = matcher.group(1)
+                                    }
+                                }
+
+                                // Log kiểm tra
+                                println "🍪 ERPNext Set-Cookie raw: ${cookies}"
+                                println "👉 Extracted SID: ${sid}"
+
+                                // Lưu vào header và property
+                                exchange.message.setHeader("ERPNext-SID", sid)
+                                exchange.setProperty("ERPNext-SID", sid)
+                                return sid
+        - log:
+            id: log-erpnext-cookie
+            message: >-
+              ✅ Đăng nhập ERPNext thành công! Cookie:
+              ${exchangeProperty.ERPNext-SID}
 - route:
     id: route-db7f
     from:
@@ -99,8 +165,8 @@
                           item_code: it.item_number,
                           item_name: it.name,
                           description: it.description,
-                          item_group: it.classification,
-                          stock_uom: it.unit,
+                          item_group: it.classification ?: "Products",
+                          stock_uom: it.unit ?: "Nos",
                           is_purchase_item: (it.make_buy == "Buy" ? 1 : 0),
                           disabled: (it.state == "Released" ? 0 : 1),
                           is_stock_item: 1,
@@ -109,37 +175,67 @@
                           allow_negative_stock: 0,
                           country_of_origin: "Vietnam",
                           default_material_request_type: "Purchase",
-                          end_of_life: "2099-12-31"
+                          end_of_life: "2099-12-31",
+                          grant_commission:1,
+                          opening_stock:0,
+                          valuation_rate:1000000
                       ]
                   }
-                  return [items: parts]
+                  return parts[0]
+        - setProperty:
+            id: save-items-body
+            name: itemsBody
+            expression:
+              simple:
+                id: simple-7bfe
+                expression: ${body}
         - log:
             id: log-transformed
             message: |
               🔄 Dữ liệu sau khi transform:
               ${body}
+        - to:
+            id: to-login-erpnext
+            uri: direct
+            parameters:
+              name: loginERPNext
         - setHeader:
-            id: 1111
-            name: Cookie
-            expression:
-              constant:
-                id: constant-79b0
-                expression: ${properties:erp.cookie}
-        - setHeader:
-            id: 2222
+            id: setHeader-final-cookie
             name: Content-Type
             expression:
               constant:
-                id: constant-aefd
+                id: constant-ed82
                 expression: application/json
+        - setHeader:
+            id: setHeader-16361
+            name: Cookie
+            expression:
+              simple:
+                id: constant-9d0b1
+                expression: >-
+                  sid=${header.ERPNext-SID}; system_user=yes;
+                  user_id=Administrator; user_image=;  system_user=yes;
+                  user_image=/private/files/pxfuel%20%283%29.jpg
+        - setBody:
+            id: setBody-910d
+            expression:
+              simple:
+                id: simple-5205
+                expression: ${exchangeProperty.itemsBody}
         - marshal:
-            id: marshal-e939
+            id: marshal-json
             json:
               id: json-de2a
-        - toD:
-            id: toD-4d63
-            uri: ${properties:erp.domain}/api/resource/Item
+        - convertBodyTo:
+            id: convert-body-to-string
+            type: java.lang.String
         - log:
-            id: 111111
-            message: |
-              GỬI THÀNH CÔNG!!
+            id: log-1cfc
+            message: "👉 Headers: ${headers}       📦 Body: ${body}  "
+        - toD:
+            id: toD-erpnext-item
+            uri: >-
+              https://dev-erpnext.imespro.ai/api/resource/Item?disableExpectContinue=true
+        - log:
+            id: log-success
+            message: ✅ Đẩy dữ liệu sang ERPNext thành công!
