@@ -143,7 +143,8 @@
         - toD:
             id: toD-a780
             uri: >-
-              ${properties:aras.domain}/InnovatorServer/server/odata/Part?$top=10&$count=false
+              ${properties:aras.domain}/InnovatorServer/server/odata/Part?$top=10&$orderby=created_on
+              desc
         - log:
             id: log-8e28
             message: |
@@ -165,8 +166,8 @@
                           item_code: it.item_number,
                           item_name: it.name,
                           description: it.description,
-                          item_group: it.classification ?: "Products",
-                          stock_uom: it.unit ?: "Nos",
+                          item_group:  "Raw Material",
+                          stock_uom: "Nos",
                           is_purchase_item: (it.make_buy == "Buy" ? 1 : 0),
                           disabled: (it.state == "Released" ? 0 : 1),
                           is_stock_item: 1,
@@ -216,6 +217,34 @@
                   sid=${header.ERPNext-SID}; system_user=yes;
                   user_id=Administrator; user_image=;  system_user=yes;
                   user_image=/private/files/pxfuel%20%283%29.jpg
+        - setHeader:
+            id: setHeader-20cb
+            name: CamelHttpMethod
+            expression:
+              constant:
+                id: constant-31c1
+                expression: POST
+        - setHeader:
+            id: setHeader-streaming
+            name: CamelHttpStreaming
+            expression:
+              constant:
+                id: constant-51f7
+                expression: false
+        - setHeader:
+            id: setHeader-disableStreamCache
+            name: CamelDisableStreamCache
+            expression:
+              constant:
+                id: constant-a062
+                expression: true
+        - setHeader:
+            id: setHeader-expect
+            name: CamelHttpExpectContinue
+            expression:
+              constant:
+                id: constant-2da6
+                expression: false
         - setBody:
             id: setBody-910d
             expression:
@@ -234,8 +263,14 @@
             message: "👉 Headers: ${headers}       📦 Body: ${body}  "
         - toD:
             id: toD-erpnext-item
-            uri: >-
-              https://dev-erpnext.imespro.ai/api/resource/Item?disableExpectContinue=true
+            uri: https://dev-erpnext.imespro.ai/api/resource/Item
+        - log:
+            id: log-response
+            message: |
+              📩 Phản hồi từ ERPNext:
+              🔢 Status: ${header.CamelHttpResponseCode}
+              🧾 Headers: ${headers}
+              📦 Body: ${body}
         - log:
             id: log-success
             message: ✅ Đẩy dữ liệu sang ERPNext thành công!
