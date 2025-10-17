@@ -140,11 +140,30 @@
               constant:
                 id: constant-9589
                 expression: ${properties:aras.cookie}
+        - setProperty:
+            id: set-current-time-minus-61s
+            name: timeFilter
+            expression:
+              groovy:
+                id: groovy-e00b
+                expression: >
+                  import java.time.*
+
+                  import java.time.format.DateTimeFormatter
+
+                  def now = ZonedDateTime.now(ZoneId.of("UTC"))
+
+                  def minus61 = now.minusSeconds(61)
+
+                  def formatted =
+                  minus61.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+
+                  return formatted
         - toD:
             id: toD-a780
             uri: >-
-              ${properties:aras.domain}/InnovatorServer/server/odata/Part?$top=10&$orderby=created_on
-              desc
+              ${properties:aras.domain}/InnovatorServer/server/odata/Part?$filter=created_on
+              gt '${exchangeProperty.timeFilter}'&$orderby=created_on desc
         - log:
             id: log-8e28
             message: |
@@ -164,10 +183,10 @@
                   def parts = input.value.collect { it ->
                       [
                           item_code: it.item_number,
-                          item_name: it.name,
-                          description: it.description,
-                          item_group:  "Raw Material",
-                          stock_uom: "Nos",
+                          item_name: it.name ?: it.keyed_name,
+                          description: it.description ?: "",
+                          item_group: "Raw Material",
+                          stock_uom:  "Nos",
                           is_purchase_item: (it.make_buy == "Buy" ? 1 : 0),
                           disabled: (it.state == "Released" ? 0 : 1),
                           is_stock_item: 1,
@@ -177,12 +196,12 @@
                           country_of_origin: "Vietnam",
                           default_material_request_type: "Purchase",
                           end_of_life: "2099-12-31",
-                          grant_commission:1,
-                          opening_stock:0,
-                          valuation_rate:1000000
+                          grant_commission: 1,
+                          opening_stock: 0,
+                          valuation_rate: 1000000
                       ]
                   }
-                  return parts[0]
+                  return parts
         - setProperty:
             id: save-items-body
             name: itemsBody
@@ -190,87 +209,68 @@
               simple:
                 id: simple-7bfe
                 expression: ${body}
-        - log:
-            id: log-transformed
-            message: |
-              🔄 Dữ liệu sau khi transform:
-              ${body}
         - to:
             id: to-login-erpnext
             uri: direct
             parameters:
               name: loginERPNext
-        - setHeader:
-            id: setHeader-final-cookie
-            name: Content-Type
-            expression:
-              constant:
-                id: constant-ed82
-                expression: application/json
-        - setHeader:
-            id: setHeader-16361
-            name: Cookie
+        - split:
+            id: split-items
             expression:
               simple:
-                id: constant-9d0b1
-                expression: >-
-                  sid=${header.ERPNext-SID}; system_user=yes;
-                  user_id=Administrator; user_image=;  system_user=yes;
-                  user_image=/private/files/pxfuel%20%283%29.jpg
-        - setHeader:
-            id: setHeader-20cb
-            name: CamelHttpMethod
-            expression:
-              constant:
-                id: constant-31c1
-                expression: POST
-        - setHeader:
-            id: setHeader-streaming
-            name: CamelHttpStreaming
-            expression:
-              constant:
-                id: constant-51f7
-                expression: false
-        - setHeader:
-            id: setHeader-disableStreamCache
-            name: CamelDisableStreamCache
-            expression:
-              constant:
-                id: constant-a062
-                expression: true
-        - setHeader:
-            id: setHeader-expect
-            name: CamelHttpExpectContinue
-            expression:
-              constant:
-                id: constant-2da6
-                expression: false
-        - setBody:
-            id: setBody-910d
-            expression:
-              simple:
-                id: simple-5205
+                id: simple-19ea
                 expression: ${exchangeProperty.itemsBody}
-        - marshal:
-            id: marshal-json
-            json:
-              id: json-de2a
-        - convertBodyTo:
-            id: convert-body-to-string
-            type: java.lang.String
-        - log:
-            id: log-1cfc
-            message: "👉 Headers: ${headers}       📦 Body: ${body}  "
-        - toD:
-            id: toD-erpnext-item
-            uri: https://dev-erpnext.imespro.ai/api/resource/Item
-        - log:
-            id: log-response
-            message: |
-              📩 Phản hồi từ ERPNext:
-              🔢 Status: ${header.CamelHttpResponseCode}
-              🧾 Headers: ${headers}
-              📦 Body: ${body}
-        - log:
-            id: log-success
-            message: ✅ Đẩy dữ liệu sang ERPNext thành công!
+            steps:
+              - log:
+                  id: log-transformed1
+                  message: |
+                    body vào steps
+                    ${body}
+              - setProperty:
+                  id: set-item-body
+                  name: itemBody
+                  expression:
+                    simple:
+                      id: simple-6797
+                      expression: ${body}
+              - marshal:
+                  id: marshal-item-json
+                  json:
+                    id: json-5327
+              - setHeader:
+                  id: setHeader-content-type
+                  name: Content-Type
+                  expression:
+                    constant:
+                      id: constant-284e
+                      expression: application/json
+              - setHeader:
+                  id: setHeader-cookie
+                  name: Cookie
+                  expression:
+                    simple:
+                      id: simple-785f
+                      expression: >-
+                        sid=${exchangeProperty.ERPNext-SID}; system_user=yes;
+                        user_id=Administrator
+              - setHeader:
+                  id: setHeader-method
+                  name: CamelHttpMethod
+                  expression:
+                    constant:
+                      id: constant-ac43
+                      expression: POST
+              - log:
+                  id: log-transformed
+                  message: |
+                    body vào steps
+                    ${body}
+              - toD:
+                  id: toD-erpnext-post
+                  uri: https://dev-erpnext.imespro.ai/api/resource/Item
+              - log:
+                  id: log-each-response
+                  message: |
+                    ✅ Đã gửi item: ${exchangeProperty.itemBody[item_code]}
+                    📩 ERPNext Response Code: ${header.CamelHttpResponseCode}
+                    📦 Body: ${body}
