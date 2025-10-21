@@ -1,0 +1,243 @@
+- route:
+    id: route-bb62
+    from:
+      id: from-369b
+      uri: platform-http
+      parameters:
+        httpMethodRestrict: POST
+        consumes: application/json
+        path: /api/sap/production-order
+      steps:
+        - log:
+            id: log-4da4
+            message: "Nhận dữ liệu từ SAP: ${body} "
+        - unmarshal:
+            id: unmarshal-b570
+            json:
+              id: json-9f6d
+        - removeHeaders:
+            id: removeHeaders-6ab1
+            pattern: "*"
+        - transform:
+            id: transform-4258
+            expression:
+              groovy:
+                id: groovy-c9c4
+                expression: "def sapData = request.body\r\n\r\ndef erpPoItems = sapData.items.collect { sapItem ->\r\n\r\n    [\r\n        item_code: sapItem.itemcode,\r\n        planned_qty: sapItem.quantity,\r\n        planned_start_date: sapData.startDate, \r\n        \r\n    ]\r\n}\r\n\r\ndef erpNextData = [\r\n    \r\n    total_planned_qty: sapData.orderquantity,\r\n    \r\n    po_items: erpPoItems,\r\n\r\n]\r\n\r\nreturn erpNextData"
+        - setHeaders:
+            id: setHeaders-5cc9
+            headers:
+              - id: setHeader-c9b9
+                name: Content-Type
+                expression:
+                  constant:
+                    id: constant-f5bf
+                    expression: application/json
+              - id: setHeader-bb26
+                name: CamelHttpMethod
+                expression:
+                  constant:
+                    id: constant-046c
+                    expression: POST
+              - id: setHeader-2a0e
+                name: Cookie
+                expression:
+                  constant:
+                    id: constant-6f72
+                    expression: >-
+                      full_name=Administrator;
+                      sid=0fbc3fceefc3c59706664248bd8627c70cf7cfda60fe22807e01c564;
+                      system_user=yes; user_id=Administrator;
+                      user_image=/private/files/pxfuel%20%283%29.jpg
+        - marshal:
+            id: marshal-484d
+            json:
+              id: json-fd1e
+        - log:
+            id: log-a4ebb
+            message: "body: ${body} headers: ${headers}"
+        - to:
+            id: to-44f44
+            uri: https
+            parameters:
+              bridgeEndpoint: true
+              throwExceptionOnFailure: false
+              httpUri: >-
+                erpnext.imespro.ai/api/method/imes.api.production_plan.production_plan
+        - choice:
+            id: choice-material-responsee
+            when:
+              - id: when-65100
+                expression:
+                  simple:
+                    id: simple-ea777
+                    expression: >-
+                      ${header.CamelHttpResponseCode} == 200 ||
+                      ${header.CamelHttpResponseCode} == 201
+                steps:
+                  - log:
+                      id: log-material-successs
+                      message: "Gửi Item thành công đến ERPNext. Response: ${body}"
+                  - setBody:
+                      id: setBody-material-successs
+                      expression:
+                        simple:
+                          id: simple-f2500
+                          expression: >-
+                            {"status": "success", "message": "Item
+                            created/updated in ERPNext"}
+            otherwise:
+              id: otherwise-e8944
+              steps:
+                - log:
+                    id: log-material-errorr
+                    message: >-
+                      Lỗi khi gửi Item đến ERPNext. HTTP Code:
+                      ${header.CamelHttpResponseCode}. Response:
+                      ${bodyAs(String)}
+                - setHeader:
+                    id: setHeader-material-error-typee
+                    name: Content-Type
+                    expression:
+                      constant:
+                        id: constant-8f9ff
+                        expression: application/json
+                - setBody:
+                    id: setBody-material-errorr
+                    expression:
+                      simple:
+                        id: simple-42fee
+                        expression: >-
+                          {"status": "error", "message": "Failed to forward Item
+                          to ERPNext", "erpnext_response": ${bodyAs(String)}}
+- route:
+    id: sap-material-to-erpnext
+    from:
+      id: from-sap-material
+      uri: platform-http
+      parameters:
+        httpMethodRestrict: POST
+        consumes: application/json
+        path: /api/sap/material
+      steps:
+        - log:
+            id: log-material-received
+            message: "Nhận Material từ SAP: ${body}"
+        - unmarshal:
+            id: unmarshal-5c8c
+            json:
+              id: json-1e14
+        - removeHeaders:
+            id: removeHeaders-515a
+            pattern: "*"
+        - transform:
+            id: transform-material-groovy
+            expression:
+              groovy:
+                id: groovy-bcb7
+                expression: |-
+                  def sapData = request.body
+
+                  def uomMap = [
+                      "PC": "Nos",
+                      "KG": "Kg",
+                      "ST": "Nos"
+                  ]
+
+                  def erpNextData = [
+                      item_code:       sapData.code ?: null, // Nếu null, gửi null
+                      item_name:       sapData.name ?: "Unknown Item Name", // Gửi tên mặc định
+                      
+                      is_stock_item:   (sapData.active ?: "0").toInteger(), 
+                      
+                      stock_uom:       uomMap.get(sapData.unitCode, sapData.unitCode ?: "Nos"),
+                      
+                      item_group:      "Products"
+                  ]
+
+                  return erpNextData
+        - setHeader:
+            id: 11111111
+            name: Content-Type
+            expression:
+              constant:
+                id: constant-52a3
+                expression: application/json
+        - setHeader:
+            id: setHeader-5a89
+            name: CamelHttpMethod
+            expression:
+              constant:
+                id: constant-8b60
+                expression: POST
+        - setHeader:
+            id: setHeader-erpnext-cookie
+            name: Cookie
+            expression:
+              constant:
+                id: constant-1318
+                expression: >-
+                  sid=e2feea5892ce8ee0e450d600d9d434ce34ff9557ff32f724457e3f2b;
+                  system_user=yes; user_id=Administrator; user_image=; 
+                  system_user=yes;
+                  user_image=/private/files/pxfuel%20%283%29.jpg
+        - marshal:
+            id: marshal-d999
+            json:
+              id: json-66c7
+        - log:
+            id: log-030b
+            message: ${body}  header ${headers}
+        - to:
+            id: to-93ca
+            uri: https
+            parameters:
+              bridgeEndpoint: true
+              throwExceptionOnFailure: false
+              httpUri: dev-erpnext.imespro.ai/api/resource/Item
+        - choice:
+            id: choice-material-response
+            when:
+              - id: when-6510
+                expression:
+                  simple:
+                    id: simple-ea77
+                    expression: >-
+                      ${header.CamelHttpResponseCode} == 200 ||
+                      ${header.CamelHttpResponseCode} == 201
+                steps:
+                  - log:
+                      id: log-material-success
+                      message: "Gửi Item thành công đến ERPNext. Response: ${body}"
+                  - setBody:
+                      id: setBody-material-success
+                      expression:
+                        simple:
+                          id: simple-f250
+                          expression: >-
+                            {"status": "success", "message": "Item
+                            created/updated in ERPNext"}
+            otherwise:
+              id: otherwise-e894
+              steps:
+                - log:
+                    id: log-material-error
+                    message: >-
+                      Lỗi khi gửi Item đến ERPNext. HTTP Code:
+                      ${header.CamelHttpResponseCode}. Response:
+                      ${bodyAs(String)}
+                - setHeader:
+                    id: setHeader-material-error-type
+                    name: Content-Type
+                    expression:
+                      constant:
+                        id: constant-8f9f
+                        expression: application/json
+                - setBody:
+                    id: setBody-material-error
+                    expression:
+                      simple:
+                        id: simple-42fe
+                        expression: >-
+                          {"status": "error", "message": "Failed to forward Item
+                          to ERPNext", "erpnext_response": ${bodyAs(String)}}
