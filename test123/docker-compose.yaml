@@ -1,0 +1,8 @@
+services:
+  test123:
+    image: test123
+    restart: always
+    ports:
+      - "8084:8080"
+    networks:
+      - karavan
