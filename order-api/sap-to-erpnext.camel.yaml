@@ -23,7 +23,65 @@
             expression:
               groovy:
                 id: groovy-c9c4
-                expression: "def sapData = request.body\r\n\r\ndef erpPoItems = sapData.items.collect { sapItem ->\r\n\r\n    [\r\n        item_code: sapItem.itemcode,\r\n        planned_qty: sapItem.quantity,\r\n        planned_start_date: sapData.startDate, \r\n        \r\n    ]\r\n}\r\n\r\ndef erpNextData = [\r\n    \r\n    total_planned_qty: sapData.orderquantity,\r\n    \r\n    po_items: erpPoItems,\r\n\r\n]\r\n\r\nreturn erpNextData"
+                expression: |
+                  def sapData = request.body
+                  exchange.setProperty("sapRawData", sapData)
+                  def stripAll = { s -> s.replaceFirst("^0+", "") }
+                  def uomMap = [
+                      "PC": "Nos",
+                      "KG": "Kg",
+                      "ST": "Nos"
+                  ]
+                  def finishedGoodItem = [
+                      item_code: stripAll(sapData.material),
+                      item_name: sapData.materialdescription,
+                      unit: uomMap.get(sapData.unit, sapData.unit ?: "Nos"),
+                  ]
+                  exchange.setProperty("finishedGoodItem", finishedGoodItem)
+
+                  def componentItems = sapData.items.collect { sapItem ->
+                      [
+                          item_code: stripAll(sapItem.itemcode),
+                          item_name: sapItem.itemname,
+                          quantity: sapItem.quantity,
+                          unit: uomMap.get(sapItem.itemunit, sapItem.itemunit ?: "Nos"),
+                      ]
+                  }
+                  exchange.setProperty("componentItems", componentItems)
+
+                  def erpPoItems = [[
+                      item_code: stripAll(sapData.material),
+                      planned_qty: sapData.orderquantity,
+                      planned_start_date: sapData.startDate
+                  ]]
+
+                  exchange.setProperty("poItems", erpPoItems)
+
+                  def erpNextData = [
+                      total_planned_qty: sapData.orderquantity,
+                      name: stripAll(sapData.productionorder),
+                      po_items: erpPoItems
+                  ]
+
+                  return erpNextData
+        - setProperty:
+            id: setProperty-173c
+            name: PoErpnext
+            expression:
+              simple:
+                id: simple-ae57
+                expression: ${body}
+        - to:
+            id: to-6e72
+            uri: direct
+            parameters:
+              name: loginERPNext
+        - setBody:
+            id: setBody-ab68
+            expression:
+              simple:
+                id: simple-06ad
+                expression: ${exchangeProperty.PoErpnext}
         - setHeaders:
             id: setHeaders-5cc9
             headers:
@@ -42,12 +100,12 @@
               - id: setHeader-2a0e
                 name: Cookie
                 expression:
-                  constant:
-                    id: constant-6f72
+                  simple:
+                    id: simple-20cb
                     expression: >-
                       full_name=Administrator;
-                      sid=0fbc3fceefc3c59706664248bd8627c70cf7cfda60fe22807e01c564;
-                      system_user=yes; user_id=Administrator;
+                      sid=${exchangeProperty.ERPNext-SID}; system_user=yes;
+                      user_id=Administrator;
                       user_image=/private/files/pxfuel%20%283%29.jpg
         - marshal:
             id: marshal-484d
