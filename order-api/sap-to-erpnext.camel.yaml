@@ -51,6 +51,7 @@
 
                   def erpPoItems = [[
                       item_code: stripAll(sapData.material),
+                      sap_bom_no: stripAll(sapData.productionorder),
                       planned_qty: sapData.orderquantity,
                       planned_start_date: sapData.startDate
                   ]]
@@ -59,7 +60,7 @@
 
                   def erpNextData = [
                       total_planned_qty: sapData.orderquantity,
-                      name: stripAll(sapData.productionorder),
+                      sap_name: "sap-" + stripAll(sapData.productionorder),
                       po_items: erpPoItems
                   ]
 
