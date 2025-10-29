@@ -1,0 +1,18 @@
+- route:
+    id: otel-test
+    from:
+      id: from-b29b
+      uri: timer
+      parameters:
+        period: 5000
+        timerName: boot?repeatCount=1
+      steps:
+        - step:
+            id: step-a1ec
+            steps:
+              - script:
+                  id: script-b352
+                  expression:
+                    groovy:
+                      id: groovy-4637
+                      expression: "import io.opentelemetry.api.OpenTelemetry\r\nimport io.opentelemetry.api.GlobalOpenTelemetry\r\nimport io.opentelemetry.api.common.Attributes\r\nimport io.opentelemetry.sdk.OpenTelemetrySdk\r\nimport io.opentelemetry.exporter.otlp.http.trace.OtlpHttpSpanExporter\r\nimport io.opentelemetry.sdk.resources.Resource\r\nimport io.opentelemetry.semconv.ResourceAttributes\r\nimport io.opentelemetry.sdk.trace.SdkTracerProvider\r\nimport io.opentelemetry.sdk.trace.export.BatchSpanProcessor\r\nimport org.apache.camel.opentelemetry.OpenTelemetryTracer\r\n\r\n// ---- Khởi tạo exporter ----\r\ndef exporter = OtlpHttpSpanExporter.builder()\r\n    .setEndpoint(\"https://otel.tuilakhanh.id.vn:443/v1/traces\")\r\n    .build()\r\n\r\n// ---- Tạo provider và resource info ----\r\ndef provider = SdkTracerProvider.builder()\r\n    .addSpanProcessor(BatchSpanProcessor.builder(exporter).build())\r\n    .setResource(Resource.create(\r\n        Attributes.of(\r\n            ResourceAttributes.SERVICE_NAME, \"order-api\",\r\n            ResourceAttributes.SERVICE_NAMESPACE, \"karavan\",\r\n            ResourceAttributes.DEPLOYMENT_ENVIRONMENT, \"local\"\r\n        )\r\n    ))\r\n    .build()\r\n\r\n// ---- Đăng ký global OpenTelemetry ----\r\ndef otel = OpenTelemetrySdk.builder()\r\n    .setTracerProvider(provider)\r\n    .buildAndRegisterGlobal()\r\n\r\n// ---- Bind bean cho Camel (nếu cần) ----\r\nexchange.context.registry.bind(\"openTelemetry\", otel)\r\nprintln(\"[OTEL INIT] OpenTelemetry HTTP bean registered successfully!\")\r\n\r\n// ---- Tạo và attach tracer vào Camel context ----\r\ndef tracer = new OpenTelemetryTracer()\r\ntracer.setInstrumentationName(\"camel\")\r\ntracer.init(exchange.context)\r\nprintln(\"[OTEL INIT] ✅ OpenTelemetryTracer attached to Camel Context (global mode)\")\r\n"
