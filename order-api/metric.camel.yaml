@@ -1,0 +1,15 @@
+- route:
+    id: route-d6e8
+    nodePrefixId: route-e38
+    from:
+      id: from-0331
+      uri: platform-http
+      parameters:
+        path: /metrics
+      steps:
+        - setBody:
+            id: setBody-8fe0
+            expression:
+              simple:
+                id: simple-7b23
+                expression: ${bean:metricsRegistry?method=scrape("text/plain")}
