@@ -23,48 +23,7 @@
             expression:
               groovy:
                 id: groovy-c9c4
-                expression: |
-                  def sapData = request.body
-                  exchange.setProperty("sapRawData", sapData)
-                  def stripAll = { s -> s.replaceFirst("^0+", "") }
-                  def uomMap = [
-                      "PC": "Nos",
-                      "KG": "Kg",
-                      "ST": "Nos"
-                  ]
-                  def finishedGoodItem = [
-                      item_code: stripAll(sapData.material),
-                      item_name: sapData.materialdescription,
-                      unit: uomMap.get(sapData.unit, sapData.unit ?: "Nos"),
-                  ]
-                  exchange.setProperty("finishedGoodItem", finishedGoodItem)
-
-                  def componentItems = sapData.items.collect { sapItem ->
-                      [
-                          item_code: stripAll(sapItem.itemcode),
-                          item_name: sapItem.itemname,
-                          quantity: sapItem.quantity,
-                          unit: uomMap.get(sapItem.itemunit, sapItem.itemunit ?: "Nos"),
-                      ]
-                  }
-                  exchange.setProperty("componentItems", componentItems)
-
-                  def erpPoItems = [[
-                      item_code: stripAll(sapData.material),
-                      sap_bom_no: stripAll(sapData.productionorder),
-                      planned_qty: sapData.orderquantity,
-                      planned_start_date: sapData.startDate
-                  ]]
-
-                  exchange.setProperty("poItems", erpPoItems)
-
-                  def erpNextData = [
-                      total_planned_qty: sapData.orderquantity,
-                      sap_name: "sap-" + stripAll(sapData.productionorder),
-                      po_items: erpPoItems
-                  ]
-
-                  return erpNextData
+                expression: "def sapData = request.body\r\nexchange.setProperty(\"sapRawData\", sapData)\r\ndef stripAll = { s -> s.replaceFirst(\"^0+\", \"\") }\r\ndef uomMap = [\r\n    \"PC\": \"Nos\",\r\n    \"KG\": \"Kg\",\r\n    \"ST\": \"Nos\",\r\n    \"M\": \"Nos\"\r\n]\r\ndef finishedGoodItem = [\r\n    item_code: stripAll(sapData.material),\r\n    item_name: sapData.materialdescription,\r\n    unit: uomMap.get(sapData.unit, sapData.unit ?: \"Nos\"),\r\n]\r\nexchange.setProperty(\"finishedGoodItem\", finishedGoodItem)\r\n\r\ndef componentItems = sapData.items.collect { sapItem ->\r\n    [\r\n        item_code: stripAll(sapItem.itemcode),\r\n        item_name: sapItem.itemname,\r\n        quantity: sapItem.quantity,\r\n        unit: uomMap.get(sapItem.itemunit, sapItem.itemunit ?: \"Nos\"),\r\n    ]\r\n}\r\nexchange.setProperty(\"componentItems\", componentItems)\r\n\r\ndef erpPoItems = [[\r\n    item_code: stripAll(sapData.material),\r\n    sap_bom_no: stripAll(sapData.productionorder),\r\n    planned_qty: sapData.orderquantity,\r\n    planned_start_date: sapData.startDate\r\n]]\r\n\r\nexchange.setProperty(\"poItems\", erpPoItems)\r\n\r\ndef erpNextData = [\r\n    total_planned_qty: sapData.orderquantity,\r\n    sap_name: \"sap-\" + stripAll(sapData.productionorder),\r\n    po_items: erpPoItems\r\n]\r\n\r\n// Tạo Stock Entry data từ component items\r\ndef stockEntryItems = sapData.items.collect { sapItem ->\r\n    [\r\n        doctype: \"Stock Entry Detail\",\r\n        cost_center: \"Main - T\",\r\n        t_warehouse: \"Nguyên vật liệu - T\",\r\n        basic_amount: 7777777,\r\n        item_code: stripAll(sapItem.itemcode),\r\n        qty: sapItem.quantity*sapData.orderquantity,\r\n        description: sapItem.itemname\r\n    ]\r\n}\r\n\r\ndef stockEntryData = [\r\n    naming_series: \"MAT-STE-.YYYY.-\",\r\n    purpose: \"Material Receipt\",\r\n    company: \"TECOMEN\",\r\n    items: stockEntryItems,\r\n    workflow_state: \"Draft\",\r\n    stock_entry_type: \"Material Receipt\",\r\n    to_warehouse: \"Nguyên vật liệu - T\"\r\n]\r\n\r\nexchange.setProperty(\"stockEntryData\", stockEntryData)\r\n\r\nreturn erpNextData\r\n"
         - setProperty:
             id: setProperty-173c
             name: PoErpnext
@@ -72,11 +31,6 @@
               simple:
                 id: simple-ae57
                 expression: ${body}
-        - to:
-            id: to-6e72
-            uri: direct
-            parameters:
-              name: loginERPNext
         - setBody:
             id: setBody-ab68
             expression:
@@ -99,22 +53,18 @@
                     id: constant-046c
                     expression: POST
               - id: setHeader-2a0e
-                name: Cookie
+                name: Authorization
                 expression:
                   simple:
                     id: simple-20cb
-                    expression: >-
-                      full_name=Administrator;
-                      sid=${exchangeProperty.ERPNext-SID}; system_user=yes;
-                      user_id=Administrator;
-                      user_image=/private/files/pxfuel%20%283%29.jpg
+                    expression: token c61c06703d10a9d:833ed41aa1bde0d
         - marshal:
             id: marshal-484d
             json:
               id: json-fd1e
         - log:
             id: log-a4ebb
-            message: "body: ${body} headers: ${headers}"
+            message: "Production Plan body: ${body} headers: ${headers}"
         - to:
             id: to-44f44
             uri: https
@@ -122,7 +72,7 @@
               bridgeEndpoint: true
               throwExceptionOnFailure: false
               httpUri: >-
-                erpnext.imespro.ai/api/method/imes.api.production_plan.production_plan
+                stg-erpnext.imespro.ai/api/method/imes.api.production_plan.production_plan
         - choice:
             id: choice-material-responsee
             when:
@@ -136,39 +86,221 @@
                 steps:
                   - log:
                       id: log-material-successs
-                      message: "Gửi Item thành công đến ERPNext. Response: ${body}"
-                  - setBody:
-                      id: setBody-material-successs
+                      message: >-
+                        Gửi Production Plan thành công đến ERPNext. Response:
+                        ${body}
+                  - setProperty:
+                      id: setProperty-po-response
+                      name: poResponse
                       expression:
                         simple:
-                          id: simple-f2500
-                          expression: >-
-                            {"status": "success", "message": "Item
-                            created/updated in ERPNext"}
+                          id: simple-po-resp
+                          expression: ${body}
+                  - setBody:
+                      id: setBody-stock-entry
+                      expression:
+                        simple:
+                          id: simple-stock-body
+                          expression: ${exchangeProperty.stockEntryData}
+                  - marshal:
+                      id: marshal-stock-entry
+                      json:
+                        id: json-stock-entry
+                  - removeHeaders:
+                      id: removeHeaders-stock
+                      pattern: "*"
+                  - setHeaders:
+                      id: setHeaders-stock-entry
+                      headers:
+                        - id: setHeader-stock-content
+                          name: Content-Type
+                          expression:
+                            constant:
+                              id: constant-stock-content
+                              expression: application/json
+                        - id: setHeader-stock-method
+                          name: CamelHttpMethod
+                          expression:
+                            constant:
+                              id: constant-stock-method
+                              expression: POST
+                        - id: setHeader-stock-auth
+                          name: Authorization
+                          expression:
+                            simple:
+                              id: simple-stock-auth
+                              expression: token c61c06703d10a9d:833ed41aa1bde0d
+                  - log:
+                      id: log-stock-entry-request
+                      message: "Stock Entry body: ${body}"
+                  - to:
+                      id: to-stock-entry
+                      uri: https
+                      parameters:
+                        bridgeEndpoint: true
+                        throwExceptionOnFailure: false
+                        httpUri: stg-erpnext.imespro.ai/api/resource/Stock Entry
+                  - choice:
+                      id: choice-stock-response
+                      when:
+                        - id: when-stock-success
+                          expression:
+                            simple:
+                              id: simple-stock-success
+                              expression: >-
+                                ${header.CamelHttpResponseCode} == 200 ||
+                                ${header.CamelHttpResponseCode} == 201
+                          steps:
+                            - log:
+                                id: log-stock-success
+                                message: "Gửi Stock Entry thành công. Response: ${body}"
+                            - unmarshal:
+                                id: unmarshal-stock-response
+                                json:
+                                  id: json-stock-unmarshal
+                            - setProperty:
+                                id: setProperty-stock-name
+                                name: stockEntryName
+                                expression:
+                                  simple:
+                                    id: simple-stock-name
+                                    expression: ${body[data][name]}
+                            - setProperty:
+                                id: setProperty-stock-response
+                                name: stockEntryResponse
+                                expression:
+                                  simple:
+                                    id: simple-stock-resp
+                                    expression: ${body}
+                            - setBody:
+                                id: setBody-submit
+                                expression:
+                                  simple:
+                                    id: simple-submit-body
+                                    expression: "{\"docstatus\": 1}"
+                            - removeHeaders:
+                                id: removeHeaders-submit
+                                pattern: "*"
+                            - setHeaders:
+                                id: setHeaders-submit
+                                headers:
+                                  - id: setHeader-submit-content
+                                    name: Content-Type
+                                    expression:
+                                      constant:
+                                        id: constant-submit-content
+                                        expression: application/json
+                                  - id: setHeader-submit-method
+                                    name: CamelHttpMethod
+                                    expression:
+                                      constant:
+                                        id: constant-submit-method
+                                        expression: PUT
+                                  - id: setHeader-submit-auth
+                                    name: Authorization
+                                    expression:
+                                      simple:
+                                        id: simple-submit-auth
+                                        expression: token c61c06703d10a9d:833ed41aa1bde0d
+                            - log:
+                                id: log-submit-request
+                                message: >-
+                                  Submit Stock Entry:
+                                  ${exchangeProperty.stockEntryName}
+                            - toD:
+                                id: toD-submit-stock
+                                uri: >-
+                                  https://stg-erpnext.imespro.ai/api/resource/Stock%20Entry/${exchangeProperty.stockEntryName}?bridgeEndpoint=true&throwExceptionOnFailure=false
+                            - choice:
+                                id: choice-submit-response
+                                when:
+                                  - id: when-submit-success
+                                    expression:
+                                      simple:
+                                        id: simple-submit-success
+                                        expression: >-
+                                          ${header.CamelHttpResponseCode} == 200
+                                          || ${header.CamelHttpResponseCode} ==
+                                          201
+                                    steps:
+                                      - log:
+                                          id: log-submit-success
+                                          message: >-
+                                            Submit Stock Entry thành công. Response:
+                                            ${body}
+                                      - setBody:
+                                          id: setBody-final-success
+                                          expression:
+                                            simple:
+                                              id: simple-final-success
+                                              expression: >-
+                                                {"status": "success", "message":
+                                                "Production Plan and Stock Entry created
+                                                and submitted successfully",
+                                                "po_response":
+                                                ${exchangeProperty.poResponse},
+                                                "stock_entry_response":
+                                                ${exchangeProperty.stockEntryResponse},
+                                                "stock_entry_submit": ${body}}
+                                otherwise:
+                                  id: otherwise-submit-error
+                                  steps:
+                                    - log:
+                                        id: log-submit-error
+                                        message: >-
+                                          Lỗi khi submit Stock Entry. HTTP Code:
+                                          ${header.CamelHttpResponseCode}.
+                                          Response: ${bodyAs(String)}
+                                    - setBody:
+                                        id: setBody-submit-error
+                                        expression:
+                                          simple:
+                                            id: simple-submit-error
+                                            expression: >-
+                                              {"status": "partial_success", "message":
+                                              "Stock Entry created but submit failed",
+                                              "po_response":
+                                              ${exchangeProperty.poResponse},
+                                              "stock_entry_response":
+                                              ${exchangeProperty.stockEntryResponse},
+                                              "submit_error": ${bodyAs(String)}}
+                      otherwise:
+                        id: otherwise-stock-error
+                        steps:
+                          - log:
+                              id: log-stock-error
+                              message: >-
+                                Lỗi khi gửi Stock Entry. HTTP Code:
+                                ${header.CamelHttpResponseCode}. Response:
+                                ${bodyAs(String)}
+                          - setBody:
+                              id: setBody-stock-error
+                              expression:
+                                simple:
+                                  id: simple-stock-error
+                                  expression: >-
+                                    {"status": "partial_success", "message":
+                                    "Production Plan created but Stock Entry
+                                    failed", "po_response":
+                                    ${exchangeProperty.poResponse},
+                                    "stock_entry_error": ${bodyAs(String)}}
             otherwise:
-              id: otherwise-e8944
+              id: otherwise-po-error
               steps:
                 - log:
-                    id: log-material-errorr
+                    id: log-po-error
                     message: >-
-                      Lỗi khi gửi Item đến ERPNext. HTTP Code:
+                      Lỗi khi gửi Production Plan. HTTP Code:
                       ${header.CamelHttpResponseCode}. Response:
                       ${bodyAs(String)}
-                - setHeader:
-                    id: setHeader-material-error-typee
-                    name: Content-Type
-                    expression:
-                      constant:
-                        id: constant-8f9ff
-                        expression: application/json
                 - setBody:
-                    id: setBody-material-errorr
+                    id: setBody-po-error
                     expression:
                       simple:
-                        id: simple-42fee
+                        id: simple-po-error
                         expression: >-
-                          {"status": "error", "message": "Failed to forward Item
-                          to ERPNext", "erpnext_response": ${bodyAs(String)}}
+                          {"status": "error", "message": "Failed to create
+                          Production Plan", "error": ${bodyAs(String)}}
 - route:
     id: sap-material-to-erpnext
     from:
@@ -194,27 +326,7 @@
             expression:
               groovy:
                 id: groovy-bcb7
-                expression: |-
-                  def sapData = request.body
-
-                  def uomMap = [
-                      "PC": "Nos",
-                      "KG": "Kg",
-                      "ST": "Nos"
-                  ]
-
-                  def erpNextData = [
-                      item_code:       sapData.code ?: null, // Nếu null, gửi null
-                      item_name:       sapData.name ?: "Unknown Item Name", // Gửi tên mặc định
-                      
-                      is_stock_item:   (sapData.active ?: "0").toInteger(), 
-                      
-                      stock_uom:       uomMap.get(sapData.unitCode, sapData.unitCode ?: "Nos"),
-                      
-                      item_group:      "Products"
-                  ]
-
-                  return erpNextData
+                expression: "def sapData = request.body\r\n\r\ndef uomMap = [\r\n    \"PC\": \"Nos\",\r\n    \"KG\": \"Kg\",\r\n    \"ST\": \"Nos\"\r\n]\r\n\r\ndef erpNextData = [\r\n    item_code:       sapData.code ?: null, // Nếu null, gửi null\r\n    item_name:       sapData.name ?: \"Unknown Item Name\", // Gửi tên mặc định\r\n    \r\n    is_stock_item:   (sapData.active ?: \"0\").toInteger(), \r\n    \r\n    \r\n    item_group:      \"Products\"\r\n]\r\n\r\nreturn erpNextData"
         - setHeader:
             id: 11111111
             name: Content-Type
@@ -231,15 +343,11 @@
                 expression: POST
         - setHeader:
             id: setHeader-erpnext-cookie
-            name: Cookie
+            name: Authorization
             expression:
               constant:
                 id: constant-1318
-                expression: >-
-                  sid=e2feea5892ce8ee0e450d600d9d434ce34ff9557ff32f724457e3f2b;
-                  system_user=yes; user_id=Administrator; user_image=; 
-                  system_user=yes;
-                  user_image=/private/files/pxfuel%20%283%29.jpg
+                expression: token c61c06703d10a9d:833ed41aa1bde0d
         - marshal:
             id: marshal-d999
             json:
@@ -253,7 +361,7 @@
             parameters:
               bridgeEndpoint: true
               throwExceptionOnFailure: false
-              httpUri: dev-erpnext.imespro.ai/api/resource/Item
+              httpUri: stg-erpnext.imespro.ai/api/resource/Item
         - choice:
             id: choice-material-response
             when:
