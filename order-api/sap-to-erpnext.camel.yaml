@@ -409,15 +409,126 @@
                           {"status": "error", "message": "Failed to forward Item
                           to ERPNext", "erpnext_response": ${bodyAs(String)}}
 - route:
-    id: route-11a8
-    nodePrefixId: route-150
+    id: route-sap-bom-sync
     from:
-      id: from-26db
+      id: from-sap-bom
       uri: platform-http
       parameters:
         path: /api/sap/bom
         httpMethodRestrict: POST
+        consumes: application/json
       steps:
         - log:
-            id: log-88e4
-            message: ${body}
+            id: log-bom-received
+            message: "Nhận BOM từ SAP: ${body}"
+        - unmarshal:
+            id: unmarshal-bom
+            json:
+              id: json-bom-unmarshal
+        - setProperty:
+            id: setProperty-sap-raw-data
+            name: sapRawData
+            expression:
+              simple:
+                id: simple-sap-raw
+                expression: ${body}
+        - removeHeaders:
+            id: removeHeaders-bom
+            pattern: "*"
+        - transform:
+            id: transform-bom-groovy
+            expression:
+              groovy:
+                id: groovy-bom-transform
+                expression: "def sapData = request.body\r\ndef stripAll = { s -> s.replaceFirst(\"^0+\", \"\") }\r\n\r\ndef erpnextPayload = [\r\n  item: stripAll(sapData.bomnumber),\r\n  quantity: sapData.baseqty?.trim()?.toFloat() ?: 1,\r\n  uom: 'PC',\r\n  items: []\r\n]\r\n\r\nsapData.items?.each { item ->\r\n  erpnextPayload.items << [\r\n    item_code: stripAll(item.component),\r\n    qty: item.quantity?.trim()?.toFloat() ?: 0\r\n  ]\r\n}\r\n\r\nreturn erpnextPayload"
+        - setHeader:
+            id: setHeader-bom-content
+            name: Content-Type
+            expression:
+              constant:
+                id: constant-bom-content
+                expression: application/json
+        - setHeader:
+            id: setHeader-bom-method
+            name: CamelHttpMethod
+            expression:
+              constant:
+                id: constant-bom-method
+                expression: POST
+        - setHeader:
+            id: setHeader-bom-auth
+            name: Authorization
+            expression:
+              simple:
+                id: simple-bom-auth
+                expression: token c61c06703d10a9d:833ed41aa1bde0d
+        - marshal:
+            id: marshal-bom
+            json:
+              id: json-bom-marshal
+        - log:
+            id: log-bom-request
+            message: "BOM body: ${body} headers: ${headers}"
+        - to:
+            id: to-bom-erpnext
+            uri: https
+            parameters:
+              bridgeEndpoint: true
+              throwExceptionOnFailure: false
+              httpUri: stg-erpnext.imespro.ai/api/resource/BOM
+        - choice:
+            id: choice-bom-response
+            when:
+              - id: when-bom-success
+                expression:
+                  simple:
+                    id: simple-bom-success
+                    expression: >-
+                      ${header.CamelHttpResponseCode} == 200 ||
+                      ${header.CamelHttpResponseCode} == 201
+                steps:
+                  - log:
+                      id: log-bom-success
+                      message: "Gửi BOM thành công đến ERPNext. Response: ${body}"
+                  - unmarshal:
+                      id: unmarshal-bom-response
+                      json:
+                        id: json-bom-response-unmarshal
+                  - setBody:
+                      id: setBody-bom-success
+                      expression:
+                        groovy:
+                          id: groovy-bom-success
+                          expression: "def erpResponse = request.body\r\ndef bomName = erpResponse?.data?.name ?: 'N/A'\r\ndef sapData = exchange.getProperty('sapRawData')\r\n\r\nreturn [\r\n  objecttype: 'BOM',\r\n  objectcode: sapData?.bomnumber ?: '',\r\n  flag: 'S',\r\n  message: \"BOM created successfully: ${bomName}\",\r\n  sessionid: exchange.exchangeId\r\n]"
+            otherwise:
+              id: otherwise-bom-error
+              steps:
+                - log:
+                    id: log-bom-error
+                    message: >-
+                      Lỗi khi gửi BOM đến ERPNext. HTTP Code:
+                      ${header.CamelHttpResponseCode}. Response:
+                      ${bodyAs(String)}
+                - convertBodyTo:
+                    id: convertBodyTo-string
+                    type: java.lang.String
+                - setProperty:
+                    id: setProperty-error-message
+                    name: errorMessage
+                    expression:
+                      simple:
+                        id: simple-error-msg
+                        expression: ${body}
+                - setBody:
+                    id: setBody-bom-error
+                    expression:
+                      groovy:
+                        id: groovy-bom-error
+                        expression: "def errorMsg = exchange.getProperty('errorMessage') ?: 'Unknown error'\r\ndef httpCode = headers['CamelHttpResponseCode'] ?: 'N/A'\r\ndef sapData = exchange.getProperty('sapRawData')\r\n\r\nreturn [\r\n  objecttype: 'BOM',\r\n  objectcode: sapData?.bomnumber ?: '',\r\n  flag: 'E',\r\n  message: \"Failed to create BOM. HTTP Code: ${httpCode}. Error: ${errorMsg}\",\r\n  sessionid: exchange.exchangeId\r\n]"
+        - marshal:
+            id: marshal-bom-final-response
+            json:
+              id: json-bom-final
+        - log:
+            id: log-bom-final-response
+            message: "Response to SAP: ${body}"
