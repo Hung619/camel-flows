@@ -1,4 +1,107 @@
 - route:
+    id: route-auth-middleware
+    from:
+      id: from-auth-middleware
+      uri: direct
+      parameters:
+        name: auth-validate
+      steps:
+        - script:
+            id: groovy-validate-jwt
+            expression:
+              groovy:
+                id: groovy-script-validate
+                expression: "import com.auth0.jwt.JWT \r\nimport com.auth0.jwt.algorithms.Algorithm \r\nimport com.auth0.jwt.exceptions.JWTVerificationException\r\n\r\n// 1. Lấy header Authorization \r\nString authHeader = request.headers.get('Authorization')\r\n\r\nif (authHeader == null || !authHeader.startsWith('Bearer ')) {\r\n    throw new SecurityException(\"Missing or invalid Authorization header\")\r\n}\r\n\r\n// 2. Lấy token string (bỏ chữ Bearer ) \r\nString token = authHeader.substring(7)\r\n\r\ntry {\r\n    // 3. Validate Token (KEY PHẢI GIỐNG KEY LÚC TẠO)\r\n    Algorithm algorithm = Algorithm.HMAC256('your-super-secret-key-change-this-in-production')\r\n    def verifier = JWT.require(algorithm)\r\n                      .withIssuer('sap-integration')\r\n                      .build()\r\n    \r\n    def decodedJWT = verifier.verify(token)\r\n    \r\n    // (Tùy chọn) Lưu user info vào header để dùng sau này\r\n    exchange.message.setHeader(\"CurrentUserId\", decodedJWT.getClaim(\"userId\").asString())\r\n    \r\n} catch (JWTVerificationException exception) {\r\n    throw new SecurityException(\"Invalid Token: \" + exception.getMessage())\r\n}\r\n"
+- route:
+    id: route-generate-jwt-token
+    from:
+      id: from-generate-token
+      uri: platform-http
+      parameters:
+        httpMethodRestrict: POST
+        path: /api/auth/token
+        consumes: application/json
+      steps:
+        - log:
+            id: log-token-request
+            message: "Token generation request: ${body}"
+        - unmarshal:
+            id: unmarshal-token-request
+            json:
+              id: json-token-req
+        - transform:
+            id: transform-generate-token
+            expression:
+              groovy:
+                id: groovy-generate-token
+                expression: >
+                  import com.auth0.jwt.JWT
+
+
+                  import com.auth0.jwt.algorithms.Algorithm
+
+
+                  import java.util.Date
+
+
+
+                  def requestBody = request.body
+
+
+                  def username = requestBody.username ?: 'SAP_SYSTEM'
+
+
+                  def userId = requestBody.userId ?: 'SAP001'
+
+
+                  def role = requestBody.role ?: 'SAP_USER'
+
+
+
+                  def algorithm =
+
+                  Algorithm.HMAC256('your-super-secret-key-change-this-in-production')
+
+
+                  def now = new Date()
+
+
+                  def expiryDate = new Date(now.time + 3600000) // 1 hour
+
+
+
+                  def token = JWT.create()
+                    .withIssuer('sap-integration')
+                    .withSubject(username)
+                    .withClaim('userId', userId)
+                    .withClaim('role', role)
+                    .withIssuedAt(now)
+                    .withExpiresAt(expiryDate)
+                    .sign(algorithm)
+
+                  return [
+                    success: true,
+                    token: token,
+                    token_type: 'Bearer',
+                    expires_in: 3600,
+                    username: username,
+                    role: role
+                  ]
+        - marshal:
+            id: marshal-token-response
+            json:
+              id: json-token-resp
+        - setHeader:
+            id: setHeader-token-content-type
+            name: Content-Type
+            expression:
+              constant:
+                id: constant-token-json
+                expression: application/json
+        - log:
+            id: log-token-generated
+            message: "Token generated successfully for user: ${body}"
+- route:
     id: route-bb62
     from:
       id: from-369b
@@ -8,9 +111,17 @@
         consumes: application/json
         path: /api/sap/production-order
       steps:
+        - to:
+            id: check-auth-po
+            uri: direct
+            parameters:
+              name: auth-validate
         - log:
             id: log-4da4
             message: "Nhận dữ liệu từ SAP: ${body} "
+        - log:
+            id: log-e633
+            message: ${header.CamelVertxPlatformHttpRemoteAddress}
         - unmarshal:
             id: unmarshal-b570
             json:
@@ -314,6 +425,9 @@
         - log:
             id: log-material-received
             message: "Nhận Material từ SAP: ${body}"
+        - log:
+            id: log-0303
+            message: ${header.CamelVertxPlatformHttpRemoteAddress}
         - unmarshal:
             id: unmarshal-5c8c
             json:
@@ -421,6 +535,9 @@
         - log:
             id: log-bom-received
             message: "Nhận BOM từ SAP: ${body}"
+        - log:
+            id: log-dc52
+            message: ${header.CamelVertxPlatformHttpRemoteAddress}
         - unmarshal:
             id: unmarshal-bom
             json:
