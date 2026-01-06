@@ -1,418 +1,4 @@
 - route:
-    id: route-auth-middleware
-    from:
-      id: from-auth-middleware
-      uri: direct
-      parameters:
-        name: auth-validate
-      steps:
-        - script:
-            id: groovy-validate-jwt
-            expression:
-              groovy:
-                id: groovy-script-validate
-                expression: "import com.auth0.jwt.JWT \r\nimport com.auth0.jwt.algorithms.Algorithm \r\nimport com.auth0.jwt.exceptions.JWTVerificationException\r\n\r\n// 1. Lấy header Authorization \r\nString authHeader = request.headers.get('Authorization')\r\n\r\nif (authHeader == null || !authHeader.startsWith('Bearer ')) {\r\n    throw new SecurityException(\"Missing or invalid Authorization header\")\r\n}\r\n\r\n// 2. Lấy token string (bỏ chữ Bearer ) \r\nString token = authHeader.substring(7)\r\n\r\ntry {\r\n    // 3. Validate Token (KEY PHẢI GIỐNG KEY LÚC TẠO)\r\n    Algorithm algorithm = Algorithm.HMAC256('your-super-secret-key-change-this-in-production')\r\n    def verifier = JWT.require(algorithm)\r\n                      .withIssuer('sap-integration')\r\n                      .build()\r\n    \r\n    def decodedJWT = verifier.verify(token)\r\n    \r\n    // (Tùy chọn) Lưu user info vào header để dùng sau này\r\n    exchange.message.setHeader(\"CurrentUserId\", decodedJWT.getClaim(\"userId\").asString())\r\n    \r\n} catch (JWTVerificationException exception) {\r\n    throw new SecurityException(\"Invalid Token: \" + exception.getMessage())\r\n}\r\n"
-- route:
-    id: route-generate-jwt-token
-    from:
-      id: from-generate-token
-      uri: platform-http
-      parameters:
-        httpMethodRestrict: POST
-        path: /api/auth/token
-        consumes: application/json
-      steps:
-        - log:
-            id: log-token-request
-            message: "Token generation request: ${body}"
-        - unmarshal:
-            id: unmarshal-token-request
-            json:
-              id: json-token-req
-        - transform:
-            id: transform-generate-token
-            expression:
-              groovy:
-                id: groovy-generate-token
-                expression: >
-                  import com.auth0.jwt.JWT
-
-
-                  import com.auth0.jwt.algorithms.Algorithm
-
-
-                  import java.util.Date
-
-
-
-                  def requestBody = request.body
-
-
-                  def username = requestBody.username ?: 'SAP_SYSTEM'
-
-
-                  def userId = requestBody.userId ?: 'SAP001'
-
-
-                  def role = requestBody.role ?: 'SAP_USER'
-
-
-
-                  def algorithm =
-
-                  Algorithm.HMAC256('your-super-secret-key-change-this-in-production')
-
-
-                  def now = new Date()
-
-
-                  def expiryDate = new Date(now.time + 3600000) // 1 hour
-
-
-
-                  def token = JWT.create()
-                    .withIssuer('sap-integration')
-                    .withSubject(username)
-                    .withClaim('userId', userId)
-                    .withClaim('role', role)
-                    .withIssuedAt(now)
-                    .withExpiresAt(expiryDate)
-                    .sign(algorithm)
-
-                  return [
-                    success: true,
-                    token: token,
-                    token_type: 'Bearer',
-                    expires_in: 3600,
-                    username: username,
-                    role: role
-                  ]
-        - marshal:
-            id: marshal-token-response
-            json:
-              id: json-token-resp
-        - setHeader:
-            id: setHeader-token-content-type
-            name: Content-Type
-            expression:
-              constant:
-                id: constant-token-json
-                expression: application/json
-        - log:
-            id: log-token-generated
-            message: "Token generated successfully for user: ${body}"
-- route:
-    id: route-bb62
-    from:
-      id: from-369b
-      uri: platform-http
-      parameters:
-        httpMethodRestrict: POST
-        consumes: application/json
-        path: /api/sap/production-order
-      steps:
-        - to:
-            id: check-auth-po
-            uri: direct
-            parameters:
-              name: auth-validate
-        - log:
-            id: log-4da4
-            message: "Nhận dữ liệu từ SAP: ${body} "
-        - log:
-            id: log-e633
-            message: ${header.CamelVertxPlatformHttpRemoteAddress}
-        - unmarshal:
-            id: unmarshal-b570
-            json:
-              id: json-9f6d
-        - removeHeaders:
-            id: removeHeaders-6ab1
-            pattern: "*"
-        - transform:
-            id: transform-4258
-            expression:
-              groovy:
-                id: groovy-c9c4
-                expression: "def sapData = request.body\r\nexchange.setProperty(\"sapRawData\", sapData)\r\ndef stripAll = { s -> s.replaceFirst(\"^0+\", \"\") }\r\ndef uomMap = [\r\n    \"PC\": \"Nos\",\r\n    \"KG\": \"Kg\",\r\n    \"ST\": \"Nos\",\r\n    \"M\": \"Nos\"\r\n]\r\ndef finishedGoodItem = [\r\n    item_code: stripAll(sapData.material),\r\n    item_name: sapData.materialdescription,\r\n    unit: uomMap.get(sapData.unit, sapData.unit ?: \"Nos\"),\r\n]\r\nexchange.setProperty(\"finishedGoodItem\", finishedGoodItem)\r\n\r\ndef componentItems = sapData.items.collect { sapItem ->\r\n    [\r\n        item_code: stripAll(sapItem.itemcode),\r\n        item_name: sapItem.itemname,\r\n        quantity: sapItem.quantity,\r\n        unit: uomMap.get(sapItem.itemunit, sapItem.itemunit ?: \"Nos\"),\r\n    ]\r\n}\r\nexchange.setProperty(\"componentItems\", componentItems)\r\n\r\ndef erpPoItems = [[\r\n    item_code: stripAll(sapData.material),\r\n    sap_bom_no: stripAll(sapData.bomid),\r\n    planned_qty: sapData.orderquantity,\r\n    planned_start_date: sapData.startDate\r\n]]\r\n\r\nexchange.setProperty(\"poItems\", erpPoItems)\r\n\r\ndef erpNextData = [\r\n    total_planned_qty: sapData.orderquantity,\r\n    name: stripAll(sapData.productionorder),\r\n    po_items: erpPoItems\r\n]\r\n\r\n// Tạo Stock Entry data từ component items\r\ndef stockEntryItems = sapData.items.collect { sapItem ->\r\n    [\r\n        doctype: \"Stock Entry Detail\",\r\n        cost_center: \"Main - T\",\r\n        t_warehouse: \"Nguyên vật liệu - T\",\r\n        basic_amount: 7777777,\r\n        item_code: stripAll(sapItem.itemcode),\r\n        qty: sapItem.quantity*sapData.orderquantity,\r\n        description: sapItem.itemname\r\n    ]\r\n}\r\n\r\ndef stockEntryData = [\r\n    naming_series: \"MAT-STE-.YYYY.-\",\r\n    purpose: \"Material Receipt\",\r\n    company: \"TECOMEN\",\r\n    items: stockEntryItems,\r\n    workflow_state: \"Draft\",\r\n    stock_entry_type: \"Material Receipt\",\r\n    to_warehouse: \"Nguyên vật liệu - T\"\r\n]\r\n\r\nexchange.setProperty(\"stockEntryData\", stockEntryData)\r\n\r\nreturn erpNextData\r\n"
-        - setProperty:
-            id: setProperty-173c
-            name: PoErpnext
-            expression:
-              simple:
-                id: simple-ae57
-                expression: ${body}
-        - setBody:
-            id: setBody-ab68
-            expression:
-              simple:
-                id: simple-06ad
-                expression: ${exchangeProperty.PoErpnext}
-        - setHeaders:
-            id: setHeaders-5cc9
-            headers:
-              - id: setHeader-c9b9
-                name: Content-Type
-                expression:
-                  constant:
-                    id: constant-f5bf
-                    expression: application/json
-              - id: setHeader-bb26
-                name: CamelHttpMethod
-                expression:
-                  constant:
-                    id: constant-046c
-                    expression: POST
-              - id: setHeader-2a0e
-                name: Authorization
-                expression:
-                  simple:
-                    id: simple-20cb
-                    expression: token c61c06703d10a9d:833ed41aa1bde0d
-        - marshal:
-            id: marshal-484d
-            json:
-              id: json-fd1e
-        - log:
-            id: log-a4ebb
-            message: "Production Plan body: ${body} headers: ${headers}"
-        - to:
-            id: to-44f44
-            uri: https
-            parameters:
-              bridgeEndpoint: true
-              throwExceptionOnFailure: false
-              httpUri: >-
-                stg-erpnext.imespro.ai/api/method/imes.api.production_plan.production_plan
-        - choice:
-            id: choice-material-responsee
-            when:
-              - id: when-65100
-                expression:
-                  simple:
-                    id: simple-ea777
-                    expression: >-
-                      ${header.CamelHttpResponseCode} == 200 ||
-                      ${header.CamelHttpResponseCode} == 201
-                steps:
-                  - log:
-                      id: log-material-successs
-                      message: >-
-                        Gửi Production Plan thành công đến ERPNext. Response:
-                        ${body}
-                  - setProperty:
-                      id: setProperty-po-response
-                      name: poResponse
-                      expression:
-                        simple:
-                          id: simple-po-resp
-                          expression: ${body}
-                  - setBody:
-                      id: setBody-stock-entry
-                      expression:
-                        simple:
-                          id: simple-stock-body
-                          expression: ${exchangeProperty.stockEntryData}
-                  - marshal:
-                      id: marshal-stock-entry
-                      json:
-                        id: json-stock-entry
-                  - removeHeaders:
-                      id: removeHeaders-stock
-                      pattern: "*"
-                  - setHeaders:
-                      id: setHeaders-stock-entry
-                      headers:
-                        - id: setHeader-stock-content
-                          name: Content-Type
-                          expression:
-                            constant:
-                              id: constant-stock-content
-                              expression: application/json
-                        - id: setHeader-stock-method
-                          name: CamelHttpMethod
-                          expression:
-                            constant:
-                              id: constant-stock-method
-                              expression: POST
-                        - id: setHeader-stock-auth
-                          name: Authorization
-                          expression:
-                            simple:
-                              id: simple-stock-auth
-                              expression: token c61c06703d10a9d:833ed41aa1bde0d
-                  - log:
-                      id: log-stock-entry-request
-                      message: "Stock Entry body: ${body}"
-                  - to:
-                      id: to-stock-entry
-                      uri: https
-                      parameters:
-                        bridgeEndpoint: true
-                        throwExceptionOnFailure: false
-                        httpUri: stg-erpnext.imespro.ai/api/resource/Stock Entry
-                  - choice:
-                      id: choice-stock-response
-                      when:
-                        - id: when-stock-success
-                          expression:
-                            simple:
-                              id: simple-stock-success
-                              expression: >-
-                                ${header.CamelHttpResponseCode} == 200 ||
-                                ${header.CamelHttpResponseCode} == 201
-                          steps:
-                            - log:
-                                id: log-stock-success
-                                message: "Gửi Stock Entry thành công. Response: ${body}"
-                            - unmarshal:
-                                id: unmarshal-stock-response
-                                json:
-                                  id: json-stock-unmarshal
-                            - setProperty:
-                                id: setProperty-stock-name
-                                name: stockEntryName
-                                expression:
-                                  simple:
-                                    id: simple-stock-name
-                                    expression: ${body[data][name]}
-                            - setProperty:
-                                id: setProperty-stock-response
-                                name: stockEntryResponse
-                                expression:
-                                  simple:
-                                    id: simple-stock-resp
-                                    expression: ${body}
-                            - setBody:
-                                id: setBody-submit
-                                expression:
-                                  simple:
-                                    id: simple-submit-body
-                                    expression: "{\"docstatus\": 1}"
-                            - removeHeaders:
-                                id: removeHeaders-submit
-                                pattern: "*"
-                            - setHeaders:
-                                id: setHeaders-submit
-                                headers:
-                                  - id: setHeader-submit-content
-                                    name: Content-Type
-                                    expression:
-                                      constant:
-                                        id: constant-submit-content
-                                        expression: application/json
-                                  - id: setHeader-submit-method
-                                    name: CamelHttpMethod
-                                    expression:
-                                      constant:
-                                        id: constant-submit-method
-                                        expression: PUT
-                                  - id: setHeader-submit-auth
-                                    name: Authorization
-                                    expression:
-                                      simple:
-                                        id: simple-submit-auth
-                                        expression: token c61c06703d10a9d:833ed41aa1bde0d
-                            - log:
-                                id: log-submit-request
-                                message: >-
-                                  Submit Stock Entry:
-                                  ${exchangeProperty.stockEntryName}
-                            - toD:
-                                id: toD-submit-stock
-                                uri: >-
-                                  https://stg-erpnext.imespro.ai/api/resource/Stock%20Entry/${exchangeProperty.stockEntryName}?bridgeEndpoint=true&throwExceptionOnFailure=false
-                            - choice:
-                                id: choice-submit-response
-                                when:
-                                  - id: when-submit-success
-                                    expression:
-                                      simple:
-                                        id: simple-submit-success
-                                        expression: >-
-                                          ${header.CamelHttpResponseCode} == 200
-                                          || ${header.CamelHttpResponseCode} ==
-                                          201
-                                    steps:
-                                      - log:
-                                          id: log-submit-success
-                                          message: >-
-                                            Submit Stock Entry thành công. Response:
-                                            ${body}
-                                      - setBody:
-                                          id: setBody-final-success
-                                          expression:
-                                            simple:
-                                              id: simple-final-success
-                                              expression: >-
-                                                {"status": "success", "message":
-                                                "Production Plan and Stock Entry created
-                                                and submitted successfully",
-                                                "po_response":
-                                                ${exchangeProperty.poResponse},
-                                                "stock_entry_response":
-                                                ${exchangeProperty.stockEntryResponse},
-                                                "stock_entry_submit": ${body}}
-                                otherwise:
-                                  id: otherwise-submit-error
-                                  steps:
-                                    - log:
-                                        id: log-submit-error
-                                        message: >-
-                                          Lỗi khi submit Stock Entry. HTTP Code:
-                                          ${header.CamelHttpResponseCode}.
-                                          Response: ${bodyAs(String)}
-                                    - setBody:
-                                        id: setBody-submit-error
-                                        expression:
-                                          simple:
-                                            id: simple-submit-error
-                                            expression: >-
-                                              {"status": "partial_success", "message":
-                                              "Stock Entry created but submit failed",
-                                              "po_response":
-                                              ${exchangeProperty.poResponse},
-                                              "stock_entry_response":
-                                              ${exchangeProperty.stockEntryResponse},
-                                              "submit_error": ${bodyAs(String)}}
-                      otherwise:
-                        id: otherwise-stock-error
-                        steps:
-                          - log:
-                              id: log-stock-error
-                              message: >-
-                                Lỗi khi gửi Stock Entry. HTTP Code:
-                                ${header.CamelHttpResponseCode}. Response:
-                                ${bodyAs(String)}
-                          - setBody:
-                              id: setBody-stock-error
-                              expression:
-                                simple:
-                                  id: simple-stock-error
-                                  expression: >-
-                                    {"status": "partial_success", "message":
-                                    "Production Plan created but Stock Entry
-                                    failed", "po_response":
-                                    ${exchangeProperty.poResponse},
-                                    "stock_entry_error": ${bodyAs(String)}}
-            otherwise:
-              id: otherwise-po-error
-              steps:
-                - log:
-                    id: log-po-error
-                    message: >-
-                      Lỗi khi gửi Production Plan. HTTP Code:
-                      ${header.CamelHttpResponseCode}. Response:
-                      ${bodyAs(String)}
-                - setBody:
-                    id: setBody-po-error
-                    expression:
-                      simple:
-                        id: simple-po-error
-                        expression: >-
-                          {"status": "error", "message": "Failed to create
-                          Production Plan", "error": ${bodyAs(String)}}
-- route:
     id: sap-material-to-erpnext
     from:
       id: from-sap-material
@@ -440,88 +26,159 @@
             expression:
               groovy:
                 id: groovy-bcb7
-                expression: "def sapData = request.body\r\n\r\ndef uomMap = [\r\n    \"PC\": \"Nos\",\r\n    \"KG\": \"Kg\",\r\n    \"ST\": \"Nos\"\r\n]\r\n\r\ndef erpNextData = [\r\n    item_code:       sapData.code ?: null, // Nếu null, gửi null\r\n    item_name:       sapData.name ?: \"Unknown Item Name\", // Gửi tên mặc định\r\n    \r\n    is_stock_item:   (sapData.active ?: \"0\").toInteger(), \r\n    \r\n    \r\n    item_group:      \"Products\"\r\n]\r\n\r\nreturn erpNextData"
-        - setHeader:
-            id: 11111111
-            name: Content-Type
+                expression: |
+                  def sapData = request.body
+
+                  def uomMap = [
+                      "PC": "Nos",
+                      "KG": "Kg",
+                      "ST": "Nos"
+                  ]
+
+                  def erpNextData = [
+                      item_code:       sapData.code ?: null,
+                      item_name:       sapData.name ?: "Unknown Item Name",
+                      is_stock_item:   (sapData.active ?: "0").toInteger(),
+                      item_group:      "Products"
+                  ]
+
+                  return erpNextData
+        - setProperty:
+            id: setProperty-material-body
+            name: materialBody
             expression:
-              constant:
-                id: constant-52a3
-                expression: application/json
-        - setHeader:
-            id: setHeader-5a89
-            name: CamelHttpMethod
-            expression:
-              constant:
-                id: constant-8b60
-                expression: POST
-        - setHeader:
-            id: setHeader-erpnext-cookie
-            name: Authorization
-            expression:
-              constant:
-                id: constant-1318
-                expression: token c61c06703d10a9d:833ed41aa1bde0d
+              simple:
+                id: simple-material-body
+                expression: ${body}
         - marshal:
             id: marshal-d999
             json:
               id: json-66c7
+        - setProperty:
+            id: setProperty-material-json
+            name: materialJson
+            expression:
+              simple:
+                id: simple-material-json
+                expression: ${body}
+        - setHeaders:
+            id: setHeaders-staging
+            headers:
+              - id: setHeader-staging-content
+                name: Content-Type
+                expression:
+                  constant:
+                    id: constant-staging-content
+                    expression: application/json
+              - id: setHeader-staging-method
+                name: CamelHttpMethod
+                expression:
+                  constant:
+                    id: constant-staging-method
+                    expression: POST
+              - id: setHeader-staging-auth
+                name: Authorization
+                expression:
+                  constant:
+                    id: constant-staging-auth
+                    expression: token c61c06703d10a9d:833ed41aa1bde0d
         - log:
-            id: log-030b
-            message: ${body}  header ${headers}
+            id: log-staging-request
+            message: "Sending to STAGING: ${body}"
         - to:
-            id: to-93ca
+            id: to-staging-material
             uri: https
             parameters:
               bridgeEndpoint: true
               throwExceptionOnFailure: false
               httpUri: stg-erpnext.imespro.ai/api/resource/Item
-        - choice:
-            id: choice-material-response
-            when:
-              - id: when-6510
+        - setProperty:
+            id: setProperty-staging-response
+            name: stagingResponse
+            expression:
+              simple:
+                id: simple-staging-resp
+                expression: ${body}
+        - setProperty:
+            id: setProperty-staging-code
+            name: stagingCode
+            expression:
+              simple:
+                id: simple-staging-code
+                expression: ${header.CamelHttpResponseCode}
+        - log:
+            id: log-staging-response
+            message: "STAGING Response [${header.CamelHttpResponseCode}]: ${body}"
+        - removeHeaders:
+            id: removeHeaders-before-prod
+            pattern: "*"
+        - setBody:
+            id: setBody-reset-prod
+            expression:
+              simple:
+                id: simple-reset-prod
+                expression: ${exchangeProperty.materialJson}
+        - setHeaders:
+            id: setHeaders-prod
+            headers:
+              - id: setHeader-prod-content
+                name: Content-Type
                 expression:
-                  simple:
-                    id: simple-ea77
-                    expression: >-
-                      ${header.CamelHttpResponseCode} == 200 ||
-                      ${header.CamelHttpResponseCode} == 201
-                steps:
-                  - log:
-                      id: log-material-success
-                      message: "Gửi Item thành công đến ERPNext. Response: ${body}"
-                  - setBody:
-                      id: setBody-material-success
-                      expression:
-                        simple:
-                          id: simple-f250
-                          expression: >-
-                            {"status": "success", "message": "Item
-                            created/updated in ERPNext"}
-            otherwise:
-              id: otherwise-e894
-              steps:
-                - log:
-                    id: log-material-error
-                    message: >-
-                      Lỗi khi gửi Item đến ERPNext. HTTP Code:
-                      ${header.CamelHttpResponseCode}. Response:
-                      ${bodyAs(String)}
-                - setHeader:
-                    id: setHeader-material-error-type
-                    name: Content-Type
-                    expression:
-                      constant:
-                        id: constant-8f9f
-                        expression: application/json
-                - setBody:
-                    id: setBody-material-error
-                    expression:
-                      simple:
-                        id: simple-42fe
-                        expression: >-
-                          {"status": "error", "message": "Failed to forward Item
-                          to ERPNext", "erpnext_response": ${bodyAs(String)}}
+                  constant:
+                    id: constant-prod-content
+                    expression: application/json
+              - id: setHeader-prod-method
+                name: CamelHttpMethod
+                expression:
+                  constant:
+                    id: constant-prod-method
+                    expression: POST
+              - id: setHeader-prod-auth
+                name: Authorization
+                expression:
+                  constant:
+                    id: constant-prod-auth
+                    expression: token 64eeba83a203ea2:5f09dfce527378b
+        - log:
+            id: log-prod-request
+            message: "Sending to PRODUCTION: ${body}"
+        - to:
+            id: to-prod-material
+            uri: https
+            parameters:
+              bridgeEndpoint: true
+              throwExceptionOnFailure: false
+              httpUri: tecomen.imespro.ai/api/resource/Item
+        - setProperty:
+            id: setProperty-prod-response
+            name: prodResponse
+            expression:
+              simple:
+                id: simple-prod-resp
+                expression: ${body}
+        - setProperty:
+            id: setProperty-prod-code
+            name: prodCode
+            expression:
+              simple:
+                id: simple-prod-code
+                expression: ${header.CamelHttpResponseCode}
+        - log:
+            id: log-prod-response
+            message: "PRODUCTION Response [${header.CamelHttpResponseCode}]: ${body}"
+        - setBody:
+            id: setBody-material-final
+            expression:
+              simple:
+                id: simple-material-final-body
+                expression: ${exchangeProperty.prodResponse}
+        - setHeader:
+            id: setHeader-final-content
+            name: Content-Type
+            expression:
+              constant:
+                id: constant-final-content
+                expression: application/json
 - route:
     id: route-sap-bom-sync
     from:
@@ -535,9 +192,6 @@
         - log:
             id: log-bom-received
             message: "Nhận BOM từ SAP: ${body}"
-        - log:
-            id: log-dc52
-            message: ${header.CamelVertxPlatformHttpRemoteAddress}
         - unmarshal:
             id: unmarshal-bom
             json:
@@ -557,95 +211,369 @@
             expression:
               groovy:
                 id: groovy-bom-transform
-                expression: "def sapData = request.body\r\ndef stripAll = { s -> s.replaceFirst(\"^0+\", \"\") }\r\n\r\ndef erpnextPayload = [\r\n  item: stripAll(sapData.bomnumber),\r\n  quantity: sapData.baseqty?.trim()?.toFloat() ?: 1,\r\n  uom: 'PC',\r\n  items: []\r\n]\r\n\r\nsapData.items?.each { item ->\r\n  erpnextPayload.items << [\r\n    item_code: stripAll(item.component),\r\n    qty: item.quantity?.trim()?.toFloat() ?: 0\r\n  ]\r\n}\r\n\r\nreturn erpnextPayload"
-        - setHeader:
-            id: setHeader-bom-content
-            name: Content-Type
-            expression:
-              constant:
-                id: constant-bom-content
-                expression: application/json
-        - setHeader:
-            id: setHeader-bom-method
-            name: CamelHttpMethod
-            expression:
-              constant:
-                id: constant-bom-method
-                expression: POST
-        - setHeader:
-            id: setHeader-bom-auth
-            name: Authorization
-            expression:
-              simple:
-                id: simple-bom-auth
-                expression: token c61c06703d10a9d:833ed41aa1bde0d
+                expression: |
+                  def sapData = request.body
+                  def stripAll = { s -> s.replaceFirst("^0+", "") }
+
+                  def erpnextPayload = [
+                    item: stripAll(sapData.bomnumber),
+                    quantity: sapData.baseqty?.trim()?.toFloat() ?: 1,
+                    uom: 'PC',
+                    items: []
+                  ]
+
+                  sapData.items?.each { item ->
+                    erpnextPayload.items << [
+                      item_code: stripAll(item.component),
+                      qty: item.quantity?.trim()?.toFloat() ?: 0
+                    ]
+                  }
+
+                  return erpnextPayload
         - marshal:
             id: marshal-bom
             json:
               id: json-bom-marshal
+        - setProperty:
+            id: setProperty-bom-json
+            name: bomJson
+            expression:
+              simple:
+                id: simple-bom-json
+                expression: ${body}
+        - setHeaders:
+            id: setHeaders-bom-staging
+            headers:
+              - id: setHeader-bom-staging-content
+                name: Content-Type
+                expression:
+                  constant:
+                    id: constant-bom-staging-content
+                    expression: application/json
+              - id: setHeader-bom-staging-method
+                name: CamelHttpMethod
+                expression:
+                  constant:
+                    id: constant-bom-staging-method
+                    expression: POST
+              - id: setHeader-bom-staging-auth
+                name: Authorization
+                expression:
+                  constant:
+                    id: constant-bom-staging-auth
+                    expression: token c61c06703d10a9d:833ed41aa1bde0d
         - log:
-            id: log-bom-request
-            message: "BOM body: ${body} headers: ${headers}"
+            id: log-bom-staging-request
+            message: "BOM to STAGING: ${body}"
         - to:
-            id: to-bom-erpnext
+            id: to-bom-staging
             uri: https
             parameters:
               bridgeEndpoint: true
               throwExceptionOnFailure: false
               httpUri: stg-erpnext.imespro.ai/api/resource/BOM
-        - choice:
-            id: choice-bom-response
-            when:
-              - id: when-bom-success
+        - setProperty:
+            id: setProperty-bom-staging-response
+            name: bomStagingResponse
+            expression:
+              simple:
+                id: simple-bom-staging-resp
+                expression: ${body}
+        - setProperty:
+            id: setProperty-bom-staging-code
+            name: bomStagingCode
+            expression:
+              simple:
+                id: simple-bom-staging-code
+                expression: ${header.CamelHttpResponseCode}
+        - log:
+            id: log-bom-staging-response
+            message: "BOM STAGING Response [${header.CamelHttpResponseCode}]: ${body}"
+        - removeHeaders:
+            id: removeHeaders-bom-prod
+            pattern: "*"
+        - setBody:
+            id: setBody-bom-reset-prod
+            expression:
+              simple:
+                id: simple-bom-reset-prod
+                expression: ${exchangeProperty.bomJson}
+        - setHeaders:
+            id: setHeaders-bom-prod
+            headers:
+              - id: setHeader-bom-prod-content
+                name: Content-Type
                 expression:
-                  simple:
-                    id: simple-bom-success
-                    expression: >-
-                      ${header.CamelHttpResponseCode} == 200 ||
-                      ${header.CamelHttpResponseCode} == 201
-                steps:
-                  - log:
-                      id: log-bom-success
-                      message: "Gửi BOM thành công đến ERPNext. Response: ${body}"
-                  - unmarshal:
-                      id: unmarshal-bom-response
-                      json:
-                        id: json-bom-response-unmarshal
-                  - setBody:
-                      id: setBody-bom-success
-                      expression:
-                        groovy:
-                          id: groovy-bom-success
-                          expression: "def erpResponse = request.body\r\ndef bomName = erpResponse?.data?.name ?: 'N/A'\r\ndef sapData = exchange.getProperty('sapRawData')\r\n\r\nreturn [\r\n  objecttype: 'BOM',\r\n  objectcode: sapData?.bomnumber ?: '',\r\n  flag: 'S',\r\n  message: \"BOM created successfully: ${bomName}\",\r\n  sessionid: exchange.exchangeId\r\n]"
-            otherwise:
-              id: otherwise-bom-error
-              steps:
-                - log:
-                    id: log-bom-error
-                    message: >-
-                      Lỗi khi gửi BOM đến ERPNext. HTTP Code:
-                      ${header.CamelHttpResponseCode}. Response:
-                      ${bodyAs(String)}
-                - convertBodyTo:
-                    id: convertBodyTo-string
-                    type: java.lang.String
-                - setProperty:
-                    id: setProperty-error-message
-                    name: errorMessage
-                    expression:
-                      simple:
-                        id: simple-error-msg
-                        expression: ${body}
-                - setBody:
-                    id: setBody-bom-error
-                    expression:
-                      groovy:
-                        id: groovy-bom-error
-                        expression: "def errorMsg = exchange.getProperty('errorMessage') ?: 'Unknown error'\r\ndef httpCode = headers['CamelHttpResponseCode'] ?: 'N/A'\r\ndef sapData = exchange.getProperty('sapRawData')\r\n\r\nreturn [\r\n  objecttype: 'BOM',\r\n  objectcode: sapData?.bomnumber ?: '',\r\n  flag: 'E',\r\n  message: \"Failed to create BOM. HTTP Code: ${httpCode}. Error: ${errorMsg}\",\r\n  sessionid: exchange.exchangeId\r\n]"
+                  constant:
+                    id: constant-bom-prod-content
+                    expression: application/json
+              - id: setHeader-bom-prod-method
+                name: CamelHttpMethod
+                expression:
+                  constant:
+                    id: constant-bom-prod-method
+                    expression: POST
+              - id: setHeader-bom-prod-auth
+                name: Authorization
+                expression:
+                  constant:
+                    id: constant-bom-prod-auth
+                    expression: token 64eeba83a203ea2:5f09dfce527378b
+        - log:
+            id: log-bom-prod-request
+            message: "BOM to PRODUCTION: ${body}"
+        - to:
+            id: to-bom-prod
+            uri: https
+            parameters:
+              bridgeEndpoint: true
+              throwExceptionOnFailure: false
+              httpUri: tecomen.imespro.ai/api/resource/BOM
+        - setProperty:
+            id: setProperty-bom-prod-response
+            name: bomProdResponse
+            expression:
+              simple:
+                id: simple-bom-prod-resp
+                expression: ${body}
+        - setProperty:
+            id: setProperty-bom-prod-code
+            name: bomProdCode
+            expression:
+              simple:
+                id: simple-bom-prod-code
+                expression: ${header.CamelHttpResponseCode}
+        - log:
+            id: log-bom-prod-response
+            message: "BOM PRODUCTION Response [${header.CamelHttpResponseCode}]: ${body}"
+        - setBody:
+            id: setBody-bom-final
+            expression:
+              groovy:
+                id: groovy-bom-final
+                expression: |
+                  def prodCode = exchange.getProperty('bomProdCode')
+                  def prodResp = exchange.getProperty('bomProdResponse')
+                  def sapData = exchange.getProperty('sapRawData')
+
+                  def prodSuccess = (prodCode == '200' || prodCode == '201')
+
+                  if (prodSuccess) {
+                      return [
+                          objecttype: 'BOM',
+                          objectcode: sapData?.bomnumber ?: '',
+                          flag: 'S',
+                          message: "BOM created successfully",
+                          sessionid: exchange.exchangeId
+                      ]
+                  } else {
+                      def errorMsg = prodResp ?: 'Unknown error'
+                      return [
+                          objecttype: 'BOM',
+                          objectcode: sapData?.bomnumber ?: '',
+                          flag: 'E',
+                          message: "Failed to create BOM. HTTP Code: ${prodCode}. Error: ${errorMsg}",
+                          sessionid: exchange.exchangeId
+                      ]
+                  }
         - marshal:
-            id: marshal-bom-final-response
+            id: marshal-bom-final
             json:
               id: json-bom-final
         - log:
             id: log-bom-final-response
-            message: "Response to SAP: ${body}"
+            message: "BOM Response to SAP (from Production): ${body}"
+- route:
+    id: route-sap-production-order
+    from:
+      id: from-production-order
+      uri: platform-http
+      parameters:
+        httpMethodRestrict: POST
+        consumes: application/json
+        path: /api/sap/production-order
+      steps:
+        - log:
+            id: log-po-received
+            message: "Nhận dữ liệu từ SAP: ${body}"
+        - unmarshal:
+            id: unmarshal-po
+            json:
+              id: json-po-unmarshal
+        - removeHeaders:
+            id: removeHeaders-po-initial
+            pattern: "*"
+        - transform:
+            id: transform-po-groovy
+            expression:
+              groovy:
+                id: groovy-po-transform
+                expression: |
+                  def sapData = request.body
+                  exchange.setProperty("sapRawData", sapData)
+                  def stripAll = { s -> s.replaceFirst("^0+", "") }
+                  def uomMap = [
+                      "PC": "Nos",
+                      "KG": "Kg",
+                      "ST": "Nos",
+                      "M": "Nos"
+                  ]
+
+                  def erpPoItems = [[
+                      item_code: stripAll(sapData.material),
+                      sap_bom_no: stripAll(sapData.bomid),
+                      planned_qty: sapData.orderquantity,
+                      planned_start_date: sapData.startDate
+                  ]]
+
+                  exchange.setProperty("poItems", erpPoItems)
+
+                  def erpNextData = [
+                      total_planned_qty: sapData.orderquantity,
+                      name: stripAll(sapData.productionorder),
+                      po_items: erpPoItems
+                  ]
+
+                  return erpNextData
+        - setProperty:
+            id: setProperty-po-erpnext
+            name: PoErpnext
+            expression:
+              simple:
+                id: simple-po-erpnext
+                expression: ${body}
+        - marshal:
+            id: marshal-po
+            json:
+              id: json-po-marshal
+        - setProperty:
+            id: setProperty-po-json
+            name: poJson
+            expression:
+              simple:
+                id: simple-po-json
+                expression: ${body}
+        - setHeaders:
+            id: setHeaders-po-staging
+            headers:
+              - id: setHeader-po-staging-content
+                name: Content-Type
+                expression:
+                  constant:
+                    id: constant-po-staging-content
+                    expression: application/json
+              - id: setHeader-po-staging-method
+                name: CamelHttpMethod
+                expression:
+                  constant:
+                    id: constant-po-staging-method
+                    expression: POST
+              - id: setHeader-po-staging-auth
+                name: Authorization
+                expression:
+                  constant:
+                    id: constant-po-staging-auth
+                    expression: token c61c06703d10a9d:833ed41aa1bde0d
+        - log:
+            id: log-po-staging-request
+            message: "Production Plan to STAGING: ${body}"
+        - to:
+            id: to-po-staging
+            uri: https
+            parameters:
+              bridgeEndpoint: true
+              throwExceptionOnFailure: false
+              httpUri: >-
+                stg-erpnext.imespro.ai/api/method/imes.api.production_plan.production_plan
+        - setProperty:
+            id: setProperty-po-staging-response
+            name: poStagingResponse
+            expression:
+              simple:
+                id: simple-po-staging-resp
+                expression: ${body}
+        - setProperty:
+            id: setProperty-po-staging-code
+            name: poStagingCode
+            expression:
+              simple:
+                id: simple-po-staging-code
+                expression: ${header.CamelHttpResponseCode}
+        - log:
+            id: log-po-staging-response
+            message: >-
+              Production Plan STAGING Response
+              [${header.CamelHttpResponseCode}]: ${body}
+        - removeHeaders:
+            id: removeHeaders-po-prod
+            pattern: "*"
+        - setBody:
+            id: setBody-po-reset-prod
+            expression:
+              simple:
+                id: simple-po-reset-prod
+                expression: ${exchangeProperty.poJson}
+        - setHeaders:
+            id: setHeaders-po-prod
+            headers:
+              - id: setHeader-po-prod-content
+                name: Content-Type
+                expression:
+                  constant:
+                    id: constant-po-prod-content
+                    expression: application/json
+              - id: setHeader-po-prod-method
+                name: CamelHttpMethod
+                expression:
+                  constant:
+                    id: constant-po-prod-method
+                    expression: POST
+              - id: setHeader-po-prod-auth
+                name: Authorization
+                expression:
+                  constant:
+                    id: constant-po-prod-auth
+                    expression: token 64eeba83a203ea2:5f09dfce527378b
+        - log:
+            id: log-po-prod-request
+            message: "Production Plan to PRODUCTION: ${body}"
+        - to:
+            id: to-po-prod
+            uri: https
+            parameters:
+              bridgeEndpoint: true
+              throwExceptionOnFailure: false
+              httpUri: >-
+                tecomen.imespro.ai/api/method/imes.api.production_plan.production_plan
+        - setProperty:
+            id: setProperty-po-prod-response
+            name: poProdResponse
+            expression:
+              simple:
+                id: simple-po-prod-resp
+                expression: ${body}
+        - setProperty:
+            id: setProperty-po-prod-code
+            name: poProdCode
+            expression:
+              simple:
+                id: simple-po-prod-code
+                expression: ${header.CamelHttpResponseCode}
+        - log:
+            id: log-po-prod-response
+            message: >-
+              Production Plan PRODUCTION Response
+              [${header.CamelHttpResponseCode}]: ${body}
+        - setBody:
+            id: setBody-po-final
+            expression:
+              simple:
+                id: simple-po-final-body
+                expression: ${exchangeProperty.poProdResponse}
+        - setHeader:
+            id: setHeader-po-final-content
+            name: Content-Type
+            expression:
+              constant:
+                id: constant-po-final-content
+                expression: application/json
