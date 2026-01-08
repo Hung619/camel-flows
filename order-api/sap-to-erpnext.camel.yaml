@@ -81,7 +81,7 @@
                 expression:
                   constant:
                     id: constant-staging-auth
-                    expression: token c61c06703d10a9d:833ed41aa1bde0d
+                    expression: token {{erpnext.staging.token}}
         - log:
             id: log-staging-request
             message: "Sending to STAGING: ${body}"
@@ -91,7 +91,7 @@
             parameters:
               bridgeEndpoint: true
               throwExceptionOnFailure: false
-              httpUri: stg-erpnext.imespro.ai/api/resource/Item
+              httpUri: "{{erpnext.staging.url}}{{erpnext.api.item}}"
         - setProperty:
             id: setProperty-staging-response
             name: stagingResponse
@@ -138,7 +138,7 @@
                 expression:
                   constant:
                     id: constant-prod-auth
-                    expression: token 64eeba83a203ea2:5f09dfce527378b
+                    expression: token {{erpnext.production.token}}
         - log:
             id: log-prod-request
             message: "Sending to PRODUCTION: ${body}"
@@ -148,7 +148,7 @@
             parameters:
               bridgeEndpoint: true
               throwExceptionOnFailure: false
-              httpUri: tecomen.imespro.ai/api/resource/Item
+              httpUri: "{{erpnext.production.url}}{{erpnext.api.item}}"
         - setProperty:
             id: setProperty-prod-response
             name: prodResponse
@@ -261,7 +261,7 @@
                 expression:
                   constant:
                     id: constant-bom-staging-auth
-                    expression: token c61c06703d10a9d:833ed41aa1bde0d
+                    expression: token {{erpnext.staging.token}}
         - log:
             id: log-bom-staging-request
             message: "BOM to STAGING: ${body}"
@@ -271,7 +271,7 @@
             parameters:
               bridgeEndpoint: true
               throwExceptionOnFailure: false
-              httpUri: stg-erpnext.imespro.ai/api/resource/BOM
+              httpUri: "{{erpnext.staging.url}}{{erpnext.api.bom}}"
         - setProperty:
             id: setProperty-bom-staging-response
             name: bomStagingResponse
@@ -318,7 +318,7 @@
                 expression:
                   constant:
                     id: constant-bom-prod-auth
-                    expression: token 64eeba83a203ea2:5f09dfce527378b
+                    expression: token {{erpnext.production.token}}
         - log:
             id: log-bom-prod-request
             message: "BOM to PRODUCTION: ${body}"
@@ -328,7 +328,7 @@
             parameters:
               bridgeEndpoint: true
               throwExceptionOnFailure: false
-              httpUri: tecomen.imespro.ai/api/resource/BOM
+              httpUri: "{{erpnext.production.url}}{{erpnext.api.bom}}"
         - setProperty:
             id: setProperty-bom-prod-response
             name: bomProdResponse
@@ -473,7 +473,7 @@
                 expression:
                   constant:
                     id: constant-po-staging-auth
-                    expression: token c61c06703d10a9d:833ed41aa1bde0d
+                    expression: token {{erpnext.staging.token}}
         - log:
             id: log-po-staging-request
             message: "Production Plan to STAGING: ${body}"
@@ -483,8 +483,7 @@
             parameters:
               bridgeEndpoint: true
               throwExceptionOnFailure: false
-              httpUri: >-
-                stg-erpnext.imespro.ai/api/method/imes.api.production_plan.production_plan
+              httpUri: "{{erpnext.staging.url}}{{erpnext.api.production.plan}}"
         - setProperty:
             id: setProperty-po-staging-response
             name: poStagingResponse
@@ -533,7 +532,7 @@
                 expression:
                   constant:
                     id: constant-po-prod-auth
-                    expression: token 64eeba83a203ea2:5f09dfce527378b
+                    expression: token {{erpnext.production.token}}
         - log:
             id: log-po-prod-request
             message: "Production Plan to PRODUCTION: ${body}"
@@ -543,8 +542,7 @@
             parameters:
               bridgeEndpoint: true
               throwExceptionOnFailure: false
-              httpUri: >-
-                tecomen.imespro.ai/api/method/imes.api.production_plan.production_plan
+              httpUri: "{{erpnext.production.url}}{{erpnext.api.production.plan}}"
         - setProperty:
             id: setProperty-po-prod-response
             name: poProdResponse
