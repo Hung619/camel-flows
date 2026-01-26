@@ -211,25 +211,7 @@
             expression:
               groovy:
                 id: groovy-bom-transform
-                expression: |
-                  def sapData = request.body
-                  def stripAll = { s -> s.replaceFirst("^0+", "") }
-
-                  def erpnextPayload = [
-                    item: stripAll(sapData.bomnumber),
-                    quantity: sapData.baseqty?.trim()?.toFloat() ?: 1,
-                    uom: 'PC',
-                    items: []
-                  ]
-
-                  sapData.items?.each { item ->
-                    erpnextPayload.items << [
-                      item_code: stripAll(item.component),
-                      qty: item.quantity?.trim()?.toFloat() ?: 0
-                    ]
-                  }
-
-                  return erpnextPayload
+                expression: "def sapData = request.body\r\ndef stripAll = { s -> s.replaceFirst(\"^0+\", \"\") }\r\n\r\ndef erpnextPayload = [\r\n  item: stripAll(sapData.matnr),\r\n  quantity: sapData.baseqty?.trim()?.toFloat() ?: 1,\r\n  uom: 'PC',\r\n  items: []\r\n]\r\n\r\nsapData.items?.each { item ->\r\n  erpnextPayload.items << [\r\n    item_code: stripAll(item.component),\r\n    qty: item.quantity?.trim()?.toFloat() ?: 0\r\n  ]\r\n}\r\n\r\nreturn erpnextPayload\r\n"
         - marshal:
             id: marshal-bom
             json:
@@ -351,31 +333,7 @@
             expression:
               groovy:
                 id: groovy-bom-final
-                expression: |
-                  def prodCode = exchange.getProperty('bomProdCode')
-                  def prodResp = exchange.getProperty('bomProdResponse')
-                  def sapData = exchange.getProperty('sapRawData')
-
-                  def prodSuccess = (prodCode == '200' || prodCode == '201')
-
-                  if (prodSuccess) {
-                      return [
-                          objecttype: 'BOM',
-                          objectcode: sapData?.bomnumber ?: '',
-                          flag: 'S',
-                          message: "BOM created successfully",
-                          sessionid: exchange.exchangeId
-                      ]
-                  } else {
-                      def errorMsg = prodResp ?: 'Unknown error'
-                      return [
-                          objecttype: 'BOM',
-                          objectcode: sapData?.bomnumber ?: '',
-                          flag: 'E',
-                          message: "Failed to create BOM. HTTP Code: ${prodCode}. Error: ${errorMsg}",
-                          sessionid: exchange.exchangeId
-                      ]
-                  }
+                expression: "def prodCode = exchange.getProperty('bomProdCode')\r\ndef prodResp = exchange.getProperty('bomProdResponse')\r\ndef sapData = exchange.getProperty('sapRawData')\r\n\r\n// Chuyển response thành String\r\ndef prodRespStr = prodResp ? prodResp.toString() : ''\r\n\r\ndef prodSuccess = (prodCode == '200' || prodCode == '201')\r\n\r\nif (prodSuccess) {\r\n    return [\r\n        objecttype: 'BOM',\r\n        objectcode: sapData?.bomnumber ?: '',\r\n        flag: 'S',\r\n        message: \"BOM created successfully\",\r\n        sessionid: exchange.exchangeId\r\n    ]\r\n} else {\r\n    def errorMsg = prodRespStr ?: 'Unknown error'\r\n    return [\r\n        objecttype: 'BOM',\r\n        objectcode: sapData?.bomnumber ?: '',\r\n        flag: 'E',\r\n        message: \"Failed to create BOM. HTTP Code: ${prodCode}. Error: ${errorMsg}\",\r\n        sessionid: exchange.exchangeId\r\n    ]\r\n}"
         - marshal:
             id: marshal-bom-final
             json:
@@ -395,7 +353,7 @@
       steps:
         - log:
             id: log-po-received
-            message: "Nhận dữ liệu từ SAP: ${body}"
+            message: "Nhận dữ liệu PO từ SAP: ${body}"
         - unmarshal:
             id: unmarshal-po
             json:
@@ -408,33 +366,7 @@
             expression:
               groovy:
                 id: groovy-po-transform
-                expression: |
-                  def sapData = request.body
-                  exchange.setProperty("sapRawData", sapData)
-                  def stripAll = { s -> s.replaceFirst("^0+", "") }
-                  def uomMap = [
-                      "PC": "Nos",
-                      "KG": "Kg",
-                      "ST": "Nos",
-                      "M": "Nos"
-                  ]
-
-                  def erpPoItems = [[
-                      item_code: stripAll(sapData.material),
-                      sap_bom_no: stripAll(sapData.bomid),
-                      planned_qty: sapData.orderquantity,
-                      planned_start_date: sapData.startDate
-                  ]]
-
-                  exchange.setProperty("poItems", erpPoItems)
-
-                  def erpNextData = [
-                      total_planned_qty: sapData.orderquantity,
-                      name: stripAll(sapData.productionorder),
-                      po_items: erpPoItems
-                  ]
-
-                  return erpNextData
+                expression: "def sapData = request.body\r\nexchange.setProperty(\"sapRawData\", sapData)\r\ndef stripAll = { s -> s.replaceFirst(\"^0+\", \"\") }\r\ndef uomMap = [\r\n    \"PC\": \"Nos\",\r\n    \"KG\": \"Kg\",\r\n    \"ST\": \"Nos\",\r\n    \"M\": \"Nos\"\r\n]\r\n\r\ndef erpPoItems = [[\r\n    item_code: stripAll(sapData.material),\r\n    sap_bom_no: stripAll(sapData.bomid),\r\n    planned_qty: sapData.orderquantity,\r\n    planned_start_date: sapData.startDate\r\n]]\r\n\r\nexchange.setProperty(\"poItems\", erpPoItems)\r\n\r\ndef erpNextData = [\r\n    total_planned_qty: sapData.orderquantity,\r\n    name: stripAll(sapData.productionorder),\r\n    posting_date:sapData.createdon,\r\n    po_items: erpPoItems\r\n]\r\n\r\nreturn erpNextData\r\n"
         - setProperty:
             id: setProperty-po-erpnext
             name: PoErpnext
@@ -503,6 +435,146 @@
             message: >-
               Production Plan STAGING Response
               [${header.CamelHttpResponseCode}]: ${body}
+        - choice:
+            id: choice-check-staging-success
+            when:
+              - id: when-staging-success
+                expression:
+                  simple:
+                    id: simple-check-staging-success
+                    expression: ${exchangeProperty.poStagingCode} == 200
+                steps:
+                  - log:
+                      id: log-start-staging-raw-materials
+                      message: >-
+                        STAGING Production Order created successfully. Starting
+                        raw materials push...
+                  - unmarshal:
+                      id: unmarshal-staging-response
+                      json:
+                        id: json-staging-response-unmarshal
+                  - setProperty:
+                      id: setProperty-staging-bom
+                      name: stagingBomNo
+                      expression:
+                        simple:
+                          id: simple-staging-bom
+                          expression: ${body[data][po_items][0][bom_no]}
+                  - setProperty:
+                      id: setProperty-staging-plan-name
+                      name: stagingProductionPlanName
+                      expression:
+                        simple:
+                          id: simple-staging-plan-name
+                          expression: ${body[data][production_plan]}
+                  - transform:
+                      id: transform-staging-raw-materials
+                      expression:
+                        groovy:
+                          id: groovy-staging-raw-materials
+                          expression: >
+                            def sapData = exchange.getProperty("sapRawData")
+
+                            def productionPlanName =
+                            exchange.getProperty("stagingProductionPlanName")
+
+                            def bomNo = exchange.getProperty("stagingBomNo")
+
+                            def stripAll = { s -> s.replaceFirst("^0+", "") }
+
+                            def uomMap = [
+                                "PC": "Nos",
+                                "KG": "Kg",
+                                "ST": "Nos",
+                                "M": "Nos"
+                            ]
+
+
+                            def items = sapData.items.collect { item ->
+                                [
+                                    item_code: stripAll(item.itemcode),
+                                    qty: item.quantity,
+                                    uom: uomMap.get(item.itemunit, item.itemunit)
+                                ]
+                            }
+
+
+                            def rawMaterialsData = [
+                                production_plan_raw_materials: [
+                                    production_plan: productionPlanName,
+                                    item_code: stripAll(sapData.material),
+                                    planned_qty: sapData.orderquantity,
+                                    bom: bomNo,
+                                    uom: uomMap.get(sapData.unit, sapData.unit),
+                                    planned_start_date: sapData.startDate + " 00:00:00.00",
+                                    items: items
+                                ]
+                            ]
+
+
+                            return rawMaterialsData
+                  - marshal:
+                      id: marshal-staging-raw-materials
+                      json:
+                        id: json-staging-raw-materials-marshal
+                  - log:
+                      id: log-staging-raw-materials-data
+                      message: "STAGING Raw materials data: ${body}"
+                  - removeHeaders:
+                      id: removeHeaders-staging-raw-materials
+                      pattern: "*"
+                  - setHeaders:
+                      id: setHeaders-staging-raw-materials
+                      headers:
+                        - id: setHeader-staging-raw-materials-content
+                          name: Content-Type
+                          expression:
+                            constant:
+                              id: constant-staging-raw-materials-content
+                              expression: application/json
+                        - id: setHeader-staging-raw-materials-method
+                          name: CamelHttpMethod
+                          expression:
+                            constant:
+                              id: constant-staging-raw-materials-method
+                              expression: POST
+                        - id: setHeader-staging-raw-materials-auth
+                          name: Authorization
+                          expression:
+                            constant:
+                              id: constant-staging-raw-materials-auth
+                              expression: token {{erpnext.staging.token}}
+                  - log:
+                      id: log-staging-raw-materials-request
+                      message: "Pushing raw materials to STAGING: ${body}"
+                  - to:
+                      id: to-staging-raw-materials
+                      uri: https
+                      parameters:
+                        bridgeEndpoint: true
+                        throwExceptionOnFailure: false
+                        httpUri: >-
+                          {{erpnext.staging.url}}/api/method/imes.api.sap.sap_push_production_plan_raw_materials
+                  - log:
+                      id: log-staging-raw-materials-response
+                      message: >-
+                        Raw Materials STAGING Response
+                        [${header.CamelHttpResponseCode}]: ${body}
+                  - setProperty:
+                      id: setProperty-staging-raw-materials-response
+                      name: stagingRawMaterialsResponse
+                      expression:
+                        simple:
+                          id: simple-staging-raw-materials-resp
+                          expression: ${body}
+            otherwise:
+              id: otherwise-staging-failed
+              steps:
+                - log:
+                    id: log-staging-failed
+                    message: >-
+                      STAGING Production Order creation failed. Skipping raw
+                      materials push.
         - removeHeaders:
             id: removeHeaders-po-prod
             pattern: "*"
@@ -542,7 +614,8 @@
             parameters:
               bridgeEndpoint: true
               throwExceptionOnFailure: false
-              httpUri: "{{erpnext.production.url}}{{erpnext.api.production.plan}}"
+              httpUri: >-
+                {{erpnext.production.url}}/api/method/imes.api.production_plan.production_plan
         - setProperty:
             id: setProperty-po-prod-response
             name: poProdResponse
@@ -562,6 +635,146 @@
             message: >-
               Production Plan PRODUCTION Response
               [${header.CamelHttpResponseCode}]: ${body}
+        - choice:
+            id: choice-check-prod-success
+            when:
+              - id: when-prod-success
+                expression:
+                  simple:
+                    id: simple-check-success
+                    expression: ${exchangeProperty.poProdCode} == 200
+                steps:
+                  - log:
+                      id: log-start-raw-materials
+                      message: >-
+                        PRODUCTION Production Order created successfully.
+                        Starting raw materials push...
+                  - unmarshal:
+                      id: unmarshal-prod-response
+                      json:
+                        id: json-prod-response-unmarshal
+                  - setProperty:
+                      id: setProperty-prod-bom
+                      name: prodBomNo
+                      expression:
+                        simple:
+                          id: simple-prod-bom
+                          expression: ${body[data][po_items][0][bom_no]}
+                  - setProperty:
+                      id: setProperty-prod-plan-name
+                      name: prodProductionPlanName
+                      expression:
+                        simple:
+                          id: simple-prod-plan-name
+                          expression: ${body[data][production_plan]}
+                  - transform:
+                      id: transform-raw-materials
+                      expression:
+                        groovy:
+                          id: groovy-raw-materials-transform
+                          expression: >
+                            def sapData = exchange.getProperty("sapRawData")
+
+                            def productionPlanName =
+                            exchange.getProperty("prodProductionPlanName")
+
+                            def bomNo = exchange.getProperty("prodBomNo")
+
+                            def stripAll = { s -> s.replaceFirst("^0+", "") }
+
+                            def uomMap = [
+                                "PC": "Nos",
+                                "KG": "Kg",
+                                "ST": "Nos",
+                                "M": "Nos"
+                            ]
+
+
+                            def items = sapData.items.collect { item ->
+                                [
+                                    item_code: stripAll(item.itemcode),
+                                    qty: item.quantity,
+                                    uom: uomMap.get(item.itemunit, item.itemunit)
+                                ]
+                            }
+
+
+                            def rawMaterialsData = [
+                                production_plan_raw_materials: [
+                                    production_plan: productionPlanName,
+                                    item_code: stripAll(sapData.material),
+                                    planned_qty: sapData.orderquantity,
+                                    bom: bomNo,
+                                    uom: uomMap.get(sapData.unit, sapData.unit),
+                                    planned_start_date: sapData.startDate + " 00:00:00.00",
+                                    items: items
+                                ]
+                            ]
+
+
+                            return rawMaterialsData
+                  - marshal:
+                      id: marshal-raw-materials
+                      json:
+                        id: json-raw-materials-marshal
+                  - log:
+                      id: log-raw-materials-data
+                      message: "PRODUCTION Raw materials data: ${body}"
+                  - removeHeaders:
+                      id: removeHeaders-raw-materials
+                      pattern: "*"
+                  - setHeaders:
+                      id: setHeaders-raw-materials
+                      headers:
+                        - id: setHeader-raw-materials-content
+                          name: Content-Type
+                          expression:
+                            constant:
+                              id: constant-raw-materials-content
+                              expression: application/json
+                        - id: setHeader-raw-materials-method
+                          name: CamelHttpMethod
+                          expression:
+                            constant:
+                              id: constant-raw-materials-method
+                              expression: POST
+                        - id: setHeader-raw-materials-auth
+                          name: Authorization
+                          expression:
+                            constant:
+                              id: constant-raw-materials-auth
+                              expression: token {{erpnext.production.token}}
+                  - log:
+                      id: log-raw-materials-request
+                      message: "Pushing raw materials to PRODUCTION: ${body}"
+                  - to:
+                      id: to-raw-materials-prod
+                      uri: https
+                      parameters:
+                        bridgeEndpoint: true
+                        throwExceptionOnFailure: false
+                        httpUri: >-
+                          {{erpnext.production.url}}/api/method/imes.api.sap.sap_push_production_plan_raw_materials
+                  - log:
+                      id: log-raw-materials-response
+                      message: >-
+                        Raw Materials PRODUCTION Response
+                        [${header.CamelHttpResponseCode}]: ${body}
+                  - setProperty:
+                      id: setProperty-raw-materials-response
+                      name: rawMaterialsResponse
+                      expression:
+                        simple:
+                          id: simple-raw-materials-resp
+                          expression: ${body}
+            otherwise:
+              id: otherwise-prod-failed
+              steps:
+                - log:
+                    id: log-prod-failed
+                    message: >-
+                      PRODUCTION Production Order creation failed. Skipping raw
+                      materials push.
         - setBody:
             id: setBody-po-final
             expression:
@@ -575,3 +788,668 @@
               constant:
                 id: constant-po-final-content
                 expression: application/json
+- route:
+    id: route-sap-material-request
+    nodePrefixId: route-3b0
+    from:
+      id: from-0a45
+      uri: platform-http
+      parameters:
+        path: /api/sap/material-request
+        httpMethodRestrict: POST
+        consumes: application/json
+      steps:
+        - log:
+            id: log-7a8c
+            message: "Nhận material request từ SAP: ${body}"
+        - unmarshal:
+            id: unmarshal-d3e8
+            json:
+              id: json-d150
+        - removeHeaders:
+            id: removeHeaders-e5d5
+            pattern: "*"
+        - transform:
+            id: transform-96c7
+            expression:
+              groovy:
+                id: groovy-f94e
+                expression: "import java.time.LocalDate\r\n\r\ndef sapDataArray = request.body  \r\nexchange.setProperty(\"sapRawData\", sapDataArray)\r\n\r\ndef stripAll = { s -> \r\n    s ? s.toString().replaceFirst(\"^0+\", \"\") : \"\" \r\n}\r\n\r\ndef uomMap = [\r\n    \"PC\": \"Nos\",\r\n    \"KG\": \"Kg\",\r\n    \"ST\": \"Nos\",\r\n    \"M\": \"Nos\"\r\n]\r\n\r\n// Xử lý từng reservation request\r\ndef allResults = []\r\n\r\nsapDataArray.each { sapData ->\r\n    // Tạo items cho mỗi reservation\r\n    def erpMrItems = sapData.items?.collect { item ->\r\n        [\r\n            item_code: stripAll(item.matnr),\r\n            schedule_date: item.bdter ?: LocalDate.now().toString(),\r\n            qty: item.bdmng?.toString()?.toFloat() ?: 0,\r\n            warehouse: item.umlgo,\r\n            from_warehouse: item.lgort,\r\n            uom: uomMap.get(item.meins) ?: \"Nos\",\r\n            rate: 0,\r\n            amount: 0,\r\n            cost_center: \"Main - T\",\r\n            production_plan: stripAll(item.wempf)\r\n        ]\r\n    } ?: []\r\n    \r\n    // Lấy giá trị chung từ header và item đầu tiên\r\n    def firstItem = sapData.items ? sapData.items[0] : null\r\n    def commonProductionPlan = firstItem ? stripAll(firstItem.wempf) : \"\"\r\n    def commonScheduleDate = sapData.rsdat ?: LocalDate.now().toString()\r\n    def sourceWarehouse = firstItem ? firstItem.lgort : null\r\n    def targetWarehouse = firstItem ? firstItem.umlgo : null\r\n    \r\n    def mrData = [\r\n        material_request_type: \"Material Transfer\",\r\n        company: \"TECOMEN\",\r\n        transaction_date: sapData.rsdat.toString(),\r\n        schedule_date: commonScheduleDate,\r\n        custom_production_plan: commonProductionPlan,\r\n        custom_sap_reservation_id: stripAll(sapData.rsnum),\r\n        set_from_warehouse: sourceWarehouse,\r\n        set_warehouse: targetWarehouse,\r\n        buying_price_list: \"Standard Buying\",\r\n        custom_notify_creator_on_workflow_update: 0,\r\n        items: erpMrItems\r\n    ]\r\n    \r\n    allResults << mrData\r\n}\r\n\r\nreturn allResults.size() == 1 ? allResults[0] : allResults"
+        - setProperty:
+            id: setProperty-46fd
+            name: mrbody
+            expression:
+              simple:
+                id: simple-8b5d
+                expression: ${body}
+        - marshal:
+            id: marshal-03a1
+            json:
+              id: json-cf2f
+        - setProperty:
+            id: setProperty-fd82
+            name: mrJson
+            expression:
+              simple:
+                id: simple-9383
+                expression: ${body}
+        - setProperty:
+            id: setProperty-reservation-id
+            name: reservationId
+            expression:
+              simple:
+                id: simple-reservation-id
+                expression: ${exchangeProperty.mrbody[custom_sap_reservation_id]}
+        - removeHeaders:
+            id: removeHeaders-before-check-stg
+            pattern: "*"
+        - setHeaders:
+            id: setHeaders-check-stg
+            headers:
+              - id: setHeader-check-stg-auth
+                name: Authorization
+                expression:
+                  constant:
+                    id: constant-check-stg-auth
+                    expression: token {{erpnext.staging.token}}
+              - id: setHeader-check-stg-method
+                name: CamelHttpMethod
+                expression:
+                  constant:
+                    id: constant-check-stg-method
+                    expression: GET
+        - log:
+            id: log-check-stg-existing
+            message: >-
+              Checking existing MR in STAGING for reservation_id:
+              ${exchangeProperty.reservationId}
+        - setHeader:
+            id: setHeader-filter-query-stg
+            name: CamelHttpQuery
+            expression:
+              simple:
+                id: simple-filter-query-stg
+                expression: >-
+                  filters=[["docstatus","!=",2],["custom_sap_reservation_id","=","${exchangeProperty.reservationId}"]]
+        - toD:
+            id: toD-check-stg-existing
+            uri: >-
+              https://{{erpnext.staging.url}}/api/resource/Material
+              Request?bridgeEndpoint=true&throwExceptionOnFailure=false
+        - setProperty:
+            id: setProperty-check-stg-response
+            name: checkStgResponse
+            expression:
+              simple:
+                id: simple-check-stg-response
+                expression: ${body}
+        - setProperty:
+            id: setProperty-check-stg-code
+            name: checkStgCode
+            expression:
+              simple:
+                id: simple-check-stg-code
+                expression: ${header.CamelHttpResponseCode}
+        - log:
+            id: log-check-stg-response
+            message: "STAGING Check Response [${header.CamelHttpResponseCode}]: ${body}"
+        - choice:
+            id: choice-stg-mr-exists
+            when:
+              - id: when-stg-mr-exists
+                expression:
+                  simple:
+                    id: simple-stg-mr-exists
+                    expression: ${exchangeProperty.checkStgCode} == '200'
+                steps:
+                  - unmarshal:
+                      id: unmarshal-check-stg-response
+                      json:
+                        id: json-check-stg-response
+                  - setProperty:
+                      id: setProperty-stg-mr-count
+                      name: mrStgCount
+                      expression:
+                        groovy:
+                          id: groovy-stg-count
+                          expression: "request.body?.data?.size() ?: 0"
+                  - choice:
+                      id: choice-stg-count
+                      when:
+                        - id: when-stg-exists
+                          expression:
+                            simple:
+                              id: simple-stg-count-gt-zero
+                              expression: ${exchangeProperty.mrStgCount} > 0
+                          steps:
+                            - setProperty:
+                                id: setProperty-existing-stg-mr-name
+                                name: existingStgMrName
+                                expression:
+                                  simple:
+                                    id: simple-existing-stg-name
+                                    expression: ${body[data][0][name]}
+                            - log:
+                                id: log-stg-mr-exists
+                                message: >-
+                                  MR already exists in STAGING:
+                                  ${exchangeProperty.existingStgMrName}.
+                                  Skipping creation.
+                            - setProperty:
+                                id: setProperty-skip-stg-creation
+                                name: skipStgCreation
+                                expression:
+                                  constant:
+                                    id: constant-skip-stg-true
+                                    expression: "true"
+                      otherwise:
+                        id: otherwise-stg-not-exists
+                        steps:
+                          - log:
+                              id: log-stg-mr-not-exists
+                              message: >-
+                                No existing MR found in STAGING. Proceeding with
+                                creation.
+                          - setProperty:
+                              id: setProperty-proceed-stg-creation
+                              name: skipStgCreation
+                              expression:
+                                constant:
+                                  id: constant-skip-stg-false
+                                  expression: "false"
+            otherwise:
+              id: otherwise-check-stg-failed
+              steps:
+                - log:
+                    id: log-check-stg-failed
+                    message: >-
+                      Check existing MR in STAGING failed. Proceeding with
+                      creation anyway.
+                - setProperty:
+                    id: setProperty-proceed-stg-anyway
+                    name: skipStgCreation
+                    expression:
+                      constant:
+                        id: constant-skip-stg-false-2
+                        expression: "false"
+        - choice:
+            id: choice-should-create-stg
+            when:
+              - id: when-should-create-stg
+                expression:
+                  simple:
+                    id: simple-should-create-stg
+                    expression: ${exchangeProperty.skipStgCreation} == 'false'
+                steps:
+                  - removeHeaders:
+                      id: removeHeaders-before-create-stg
+                      pattern: "*"
+                  - setBody:
+                      id: setBody-restore-stg-json
+                      expression:
+                        simple:
+                          id: simple-restore-stg-json
+                          expression: ${exchangeProperty.mrJson}
+                  - setHeaders:
+                      id: setHeaders-stg
+                      headers:
+                        - id: setHeader-staging-auth
+                          name: Authorization
+                          expression:
+                            constant:
+                              id: constant-staging-auth
+                              expression: token {{erpnext.staging.token}}
+                        - id: setHeader-staging-content
+                          name: Content-Type
+                          expression:
+                            constant:
+                              id: constant-staging-content
+                              expression: application/json
+                        - id: setHeader-staging-method
+                          name: CamelHttpMethod
+                          expression:
+                            constant:
+                              id: constant-staging-method
+                              expression: POST
+                  - log:
+                      id: log-stg-request
+                      message: "Sending Material Request to STAGING: ${body}"
+                  - to:
+                      id: to-staging
+                      uri: https
+                      parameters:
+                        bridgeEndpoint: true
+                        throwExceptionOnFailure: false
+                        httpUri: "{{erpnext.staging.url}}/api/resource/Material Request"
+                  - setProperty:
+                      id: setProperty-stg-response
+                      name: mrStagingResponse
+                      expression:
+                        simple:
+                          id: simple-staging-response
+                          expression: ${body}
+                  - setProperty:
+                      id: setProperty-stg-code
+                      name: mrStagingCode
+                      expression:
+                        simple:
+                          id: simple-staging-code
+                          expression: ${header.CamelHttpResponseCode}
+                  - log:
+                      id: log-stg-response
+                      message: >-
+                        STAGING Material Request Response
+                        [${header.CamelHttpResponseCode}]: ${body}
+                  - choice:
+                      id: choice-staging-submit
+                      when:
+                        - id: when-stg-success
+                          expression:
+                            simple:
+                              id: simple-check-staging-success
+                              expression: ${exchangeProperty.mrStagingCode} == '200'
+                          steps:
+                            - unmarshal:
+                                id: unmarshal-stg-response
+                                json:
+                                  id: json-staging-response
+                            - setProperty:
+                                id: setProperty-staging-mr-name
+                                name: mrStagingName
+                                expression:
+                                  simple:
+                                    id: simple-staging-mr-name
+                                    expression: ${body[data][name]}
+                            - log:
+                                id: log-staging-mr-name
+                                message: >-
+                                  STAGING Material Request Name:
+                                  ${exchangeProperty.mrStagingName}
+                            - setBody:
+                                id: setBody-staging-submit
+                                expression:
+                                  constant:
+                                    id: constant-staging-submit-body
+                                    expression: "{\"docstatus\": 1}"
+                            - setHeaders:
+                                id: setHeaders-staging-submit
+                                headers:
+                                  - id: setHeader-staging-submit-auth
+                                    name: Authorization
+                                    expression:
+                                      constant:
+                                        id: constant-staging-submit-auth
+                                        expression: token {{erpnext.staging.token}}
+                                  - id: setHeader-staging-submit-content
+                                    name: Content-Type
+                                    expression:
+                                      constant:
+                                        id: constant-staging-submit-content
+                                        expression: application/json
+                                  - id: setHeader-staging-submit-method
+                                    name: CamelHttpMethod
+                                    expression:
+                                      constant:
+                                        id: constant-staging-submit-method
+                                        expression: PUT
+                            - log:
+                                id: log-staging-submit-request
+                                message: >-
+                                  Submitting STAGING Material Request:
+                                  ${exchangeProperty.mrStagingName}
+                            - toD:
+                                id: toD-staging-submit
+                                uri: >-
+                                  https://{{erpnext.staging.url}}/api/resource/Material
+                                  Request/${exchangeProperty.mrStagingName}?bridgeEndpoint=true&throwExceptionOnFailure=false
+                            - log:
+                                id: log-staging-submit-response
+                                message: >-
+                                  STAGING Submit Response
+                                  [${header.CamelHttpResponseCode}]: ${body}
+                      otherwise:
+                        id: otherwise-stg-failed
+                        steps:
+                          - log:
+                              id: log-staging-create-failed
+                              message: >-
+                                STAGING Material Request creation failed, skip
+                                submit
+            otherwise:
+              id: otherwise-skip-stg-creation
+              steps:
+                - log:
+                    id: log-skip-stg-creation
+                    message: Skipping STAGING MR creation because it already exists
+        - removeHeaders:
+            id: removeHeaders-before-check-prod
+            pattern: "*"
+        - setHeaders:
+            id: setHeaders-check-prod
+            headers:
+              - id: setHeader-check-prod-auth
+                name: Authorization
+                expression:
+                  constant:
+                    id: constant-check-prod-auth
+                    expression: token {{erpnext.production.token}}
+              - id: setHeader-check-prod-method
+                name: CamelHttpMethod
+                expression:
+                  constant:
+                    id: constant-check-prod-method
+                    expression: GET
+        - log:
+            id: log-check-prod-existing
+            message: >-
+              Checking existing MR in PRODUCTION for reservation_id:
+              ${exchangeProperty.reservationId}
+        - setHeader:
+            id: setHeader-filter-query-prod
+            name: CamelHttpQuery
+            expression:
+              simple:
+                id: simple-filter-query-prod
+                expression: >-
+                  filters=[["docstatus","!=",2],["custom_sap_reservation_id","=","${exchangeProperty.reservationId}"]]
+        - toD:
+            id: toD-check-prod-existing
+            uri: >-
+              https://{{erpnext.production.url}}/api/resource/Material
+              Request?bridgeEndpoint=true&throwExceptionOnFailure=false
+        - setProperty:
+            id: setProperty-check-prod-response
+            name: checkProdResponse
+            expression:
+              simple:
+                id: simple-check-prod-response
+                expression: ${body}
+        - setProperty:
+            id: setProperty-check-prod-code
+            name: checkProdCode
+            expression:
+              simple:
+                id: simple-check-prod-code
+                expression: ${header.CamelHttpResponseCode}
+        - log:
+            id: log-check-prod-response
+            message: >-
+              PRODUCTION Check Response [${header.CamelHttpResponseCode}]:
+              ${body}
+        - choice:
+            id: choice-prod-mr-exists
+            when:
+              - id: when-prod-mr-exists
+                expression:
+                  simple:
+                    id: simple-prod-mr-exists
+                    expression: ${exchangeProperty.checkProdCode} == '200'
+                steps:
+                  - unmarshal:
+                      id: unmarshal-check-prod-response
+                      json:
+                        id: json-check-prod-response
+                  - setProperty:
+                      id: setProperty-prod-mr-count
+                      name: mrProdCount
+                      expression:
+                        groovy:
+                          id: groovy-prod-count
+                          expression: "request.body?.data?.size() ?: 0"
+                  - choice:
+                      id: choice-prod-count
+                      when:
+                        - id: when-prod-exists
+                          expression:
+                            simple:
+                              id: simple-prod-count-gt-zero
+                              expression: ${exchangeProperty.mrProdCount} > 0
+                          steps:
+                            - setProperty:
+                                id: setProperty-existing-prod-mr-name
+                                name: existingProdMrName
+                                expression:
+                                  simple:
+                                    id: simple-existing-prod-name
+                                    expression: ${body[data][0][name]}
+                            - log:
+                                id: log-prod-mr-exists
+                                message: >-
+                                  MR already exists in PRODUCTION:
+                                  ${exchangeProperty.existingProdMrName}.
+                                  Skipping creation.
+                            - setBody:
+                                id: setBody-prod-exists-response
+                                expression:
+                                  constant:
+                                    id: constant-prod-exists-response
+                                    expression: >-
+                                      {"status": "exists", "message": "Material
+                                      Request already exists in PRODUCTION",
+                                      "mr_name":
+                                      "${exchangeProperty.existingProdMrName}"}
+                            - setProperty:
+                                id: setProperty-skip-prod-creation
+                                name: skipProdCreation
+                                expression:
+                                  constant:
+                                    id: constant-skip-prod-true
+                                    expression: "true"
+                            - setProperty:
+                                id: setProperty-final-from-exists
+                                name: finalResponse
+                                expression:
+                                  simple:
+                                    id: simple-final-from-exists
+                                    expression: ${body}
+                      otherwise:
+                        id: otherwise-prod-not-exists
+                        steps:
+                          - log:
+                              id: log-prod-mr-not-exists
+                              message: >-
+                                No existing MR found in PRODUCTION. Proceeding
+                                with creation.
+                          - setProperty:
+                              id: setProperty-proceed-prod-creation
+                              name: skipProdCreation
+                              expression:
+                                constant:
+                                  id: constant-skip-prod-false
+                                  expression: "false"
+            otherwise:
+              id: otherwise-check-prod-failed
+              steps:
+                - log:
+                    id: log-check-prod-failed
+                    message: >-
+                      Check existing MR in PRODUCTION failed. Proceeding with
+                      creation anyway.
+                - setProperty:
+                    id: setProperty-proceed-prod-anyway
+                    name: skipProdCreation
+                    expression:
+                      constant:
+                        id: constant-skip-prod-false-2
+                        expression: "false"
+        - choice:
+            id: choice-should-create-prod
+            when:
+              - id: when-should-create-prod
+                expression:
+                  simple:
+                    id: simple-should-create-prod
+                    expression: ${exchangeProperty.skipProdCreation} == 'false'
+                steps:
+                  - removeHeaders:
+                      id: removeHeaders-before-product
+                      pattern: "*"
+                  - setBody:
+                      id: setBody-reset-product
+                      expression:
+                        simple:
+                          id: simple-reset-prod
+                          expression: ${exchangeProperty.mrJson}
+                  - setHeaders:
+                      id: setHeaders-product
+                      headers:
+                        - id: setHeader-prod-auth
+                          name: Authorization
+                          expression:
+                            constant:
+                              id: constant-prod-auth
+                              expression: token {{erpnext.production.token}}
+                        - id: setHeader-prod-content
+                          name: Content-Type
+                          expression:
+                            constant:
+                              id: constant-prod-content
+                              expression: application/json
+                        - id: setHeader-prod-method
+                          name: CamelHttpMethod
+                          expression:
+                            constant:
+                              id: constant-prod-method
+                              expression: POST
+                  - log:
+                      id: log-product-request
+                      message: "Sending Material Request to PRODUCTION: ${body}"
+                  - to:
+                      id: to-prod
+                      uri: https
+                      parameters:
+                        bridgeEndpoint: true
+                        throwExceptionOnFailure: false
+                        httpUri: >-
+                          {{erpnext.production.url}}/api/resource/Material
+                          Request
+                  - setProperty:
+                      id: setProperty-product-response
+                      name: mrProdResponse
+                      expression:
+                        simple:
+                          id: simple-prod-response
+                          expression: ${body}
+                  - setProperty:
+                      id: setProperty-product-code
+                      name: mrProdCode
+                      expression:
+                        simple:
+                          id: simple-prod-code
+                          expression: ${header.CamelHttpResponseCode}
+                  - log:
+                      id: log-product-response
+                      message: >-
+                        PRODUCTION Material Request Response
+                        [${header.CamelHttpResponseCode}]: ${body}
+                  - choice:
+                      id: choice-prod-submit
+                      when:
+                        - id: when-product-success
+                          expression:
+                            simple:
+                              id: simple-check-prod-success
+                              expression: ${exchangeProperty.mrProdCode} == '200'
+                          steps:
+                            - unmarshal:
+                                id: unmarshal-product-response
+                                json:
+                                  id: json-prod-response
+                            - setProperty:
+                                id: setProperty-prod-mr-name
+                                name: mrProdName
+                                expression:
+                                  simple:
+                                    id: simple-prod-mr-name
+                                    expression: ${body[data][name]}
+                            - log:
+                                id: log-prod-mr-name
+                                message: >-
+                                  PRODUCTION Material Request Name:
+                                  ${exchangeProperty.mrProdName}
+                            - setBody:
+                                id: setBody-prod-submit
+                                expression:
+                                  constant:
+                                    id: constant-prod-submit-body
+                                    expression: "{\"docstatus\": 1}"
+                            - setHeaders:
+                                id: setHeaders-prod-submit
+                                headers:
+                                  - id: setHeader-prod-submit-auth
+                                    name: Authorization
+                                    expression:
+                                      constant:
+                                        id: constant-prod-submit-auth
+                                        expression: token {{erpnext.production.token}}
+                                  - id: setHeader-prod-submit-content
+                                    name: Content-Type
+                                    expression:
+                                      constant:
+                                        id: constant-prod-submit-content
+                                        expression: application/json
+                                  - id: setHeader-prod-submit-method
+                                    name: CamelHttpMethod
+                                    expression:
+                                      constant:
+                                        id: constant-prod-submit-method
+                                        expression: PUT
+                            - log:
+                                id: log-prod-submit-request
+                                message: >-
+                                  Submitting PRODUCTION Material Request:
+                                  ${exchangeProperty.mrProdName}
+                            - toD:
+                                id: toD-prod-submit
+                                uri: >-
+                                  https://{{erpnext.production.url}}/api/resource/Material
+                                  Request/${exchangeProperty.mrProdName}?bridgeEndpoint=true&throwExceptionOnFailure=false
+                            - log:
+                                id: log-prod-submit-response
+                                message: >-
+                                  PRODUCTION Submit Response
+                                  [${header.CamelHttpResponseCode}]: ${body}
+                            - setProperty:
+                                id: setProperty-prod-final-response
+                                name: finalResponse
+                                expression:
+                                  simple:
+                                    id: simple-prod-final-response
+                                    expression: ${body}
+                      otherwise:
+                        id: otherwise-product-failed
+                        steps:
+                          - log:
+                              id: log-prod-create-failed
+                              message: >-
+                                PRODUCTION Material Request creation failed,
+                                skip submit
+                          - setProperty:
+                              id: setProperty-prod-failed-response
+                              name: finalResponse
+                              expression:
+                                simple:
+                                  id: simple-prod-failed-response
+                                  expression: ${exchangeProperty.mrProdResponse}
+            otherwise:
+              id: otherwise-skip-prod-creation
+              steps:
+                - log:
+                    id: log-skip-prod-creation
+                    message: Skipping PRODUCTION MR creation because it already exists
+        - setBody:
+            id: setBody-final
+            expression:
+              simple:
+                id: simple-final
+                expression: ${exchangeProperty.finalResponse}
+        - setHeader:
+            id: setHeader-final-content-1
+            name: Content-Type
+            expression:
+              constant:
+                id: constant-final-content
+                expression: application/json
+        - log:
+            id: log-final-response
+            message: "Material Request Final Response to SAP (from Production): ${body}"
