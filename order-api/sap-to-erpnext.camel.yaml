@@ -366,48 +366,7 @@
             expression:
               groovy:
                 id: groovy-po-transform
-                expression: >
-                  def sapData = request.body
-
-                  exchange.setProperty("sapRawData", sapData)
-
-                  def stripAll = { s -> s.replaceFirst("^0+", "") }
-
-                  def uomMap = [
-                      "PC": "Nos",
-                      "KG": "Kg",
-                      "ST": "Nos",
-                      "M": "Nos"
-                  ]
-
-
-                  def erpPoItems = [[
-                      item_code: stripAll(sapData.material),
-                      sap_bom_no: stripAll(sapData.bomid),
-                      planned_qty: sapData.orderquantity,
-                      planned_start_date: sapData.startDate
-                  ]]
-
-
-                  exchange.setProperty("poItems", erpPoItems)
-
-
-                  def erpNextData = [
-                      custom_sap_po_type: sapData.ordertype,
-                      total_planned_qty: sapData.orderquantity,
-                      name: stripAll(sapData.productionorder),
-                      posting_date: sapData.createdon,
-                      po_items: erpPoItems
-                  ]
-
-
-                  // Store production order name for checking
-
-                  exchange.setProperty("productionOrderName",
-                  stripAll(sapData.productionorder))
-
-
-                  return erpNextData
+                expression: "def sapData = request.body\r\nexchange.setProperty(\"sapRawData\", sapData)\r\ndef stripAll = { s -> s.replaceFirst(\"^0+\", \"\") }\r\ndef uomMap = [\r\n    \"PC\": \"Nos\",\r\n    \"KG\": \"Kg\",\r\n    \"ST\": \"Nos\",\r\n    \"M\": \"Nos\"\r\n]\r\n\r\ndef erpPoItems = [[\r\n    item_code: stripAll(sapData.material),\r\n    uom: sapData.unit,\r\n    sap_bom_no: stripAll(sapData.bomid),\r\n    planned_qty: sapData.orderquantity,\r\n    planned_start_date: sapData.startDate\r\n]]\r\n\r\nexchange.setProperty(\"poItems\", erpPoItems)\r\n\r\ndef erpNextData = [\r\n    custom_sap_po_type: sapData.ordertype,\r\n    total_planned_qty: sapData.orderquantity,\r\n    name: stripAll(sapData.productionorder),\r\n    posting_date: sapData.createdon,\r\n    po_items: erpPoItems\r\n]\r\n\r\n// Store production order name for checking\r\nexchange.setProperty(\"productionOrderName\", stripAll(sapData.productionorder))\r\n\r\nreturn erpNextData\r\n"
         - setProperty:
             id: setProperty-po-erpnext
             name: PoErpnext
@@ -1517,73 +1476,7 @@
             expression:
               groovy:
                 id: groovy-f94e
-                expression: |
-                  import java.time.LocalDate
-
-                  def sapDataArray = request.body  
-                  exchange.setProperty("sapRawData", sapDataArray)
-
-                  // Initialize results list in exchange property
-                  exchange.setProperty("allMrResults", [])
-                  exchange.setProperty("totalMrCount", sapDataArray.size())
-
-                  def stripAll = { s -> 
-                      s ? s.toString().replaceFirst("^0+", "") : "" 
-                  }
-
-                  def uomMap = [
-                      "PC": "Nos",
-                      "KG": "Kg",
-                      "ST": "Nos",
-                      "M": "Nos"
-                  ]
-
-                  // Xử lý từng reservation request và tạo danh sách MR
-                  def allResults = []
-
-                  sapDataArray.each { sapData ->
-                      // Tạo items cho mỗi reservation
-                      def erpMrItems = sapData.items?.collect { item ->
-                          [
-                              item_code: stripAll(item.matnr),
-                              schedule_date: item.bdter ?: LocalDate.now().toString(),
-                              qty: item.bdmng?.toString()?.toFloat() ?: 0,
-                              warehouse: item.umlgo,
-                              from_warehouse: item.lgort,
-                              uom: item.meins,
-                              rate: 0,
-                              amount: 0,
-                              cost_center: "Main - T",
-                              production_plan: stripAll(item.wempf)
-                          ]
-                      } ?: []
-                      
-                      // Lấy giá trị chung từ header và item đầu tiên
-                      def firstItem = sapData.items ? sapData.items[0] : null
-                      def commonProductionPlan = firstItem ? stripAll(firstItem.wempf) : ""
-                      def commonScheduleDate = sapData.rsdat ?: LocalDate.now().toString()
-                      def sourceWarehouse = firstItem ? firstItem.lgort : null
-                      def targetWarehouse = firstItem ? firstItem.umlgo : null
-                      
-                      def mrData = [
-                          material_request_type: "Material Transfer",
-                          company: "TECOMEN",
-                          transaction_date: sapData.rsdat.toString(),
-                          schedule_date: commonScheduleDate,
-                          custom_production_plan: commonProductionPlan,
-                          custom_sap_reservation_id: stripAll(sapData.rsnum),
-                          set_from_warehouse: sourceWarehouse,
-                          set_warehouse: targetWarehouse,
-                          buying_price_list: "Standard Buying",
-                          custom_notify_creator_on_workflow_update: 0,
-                          items: erpMrItems
-                      ]
-                      
-                      allResults << mrData
-                  }
-
-                  // Trả về mảng các MR để xử lý từng cái một
-                  return allResults
+                expression: "import java.time.LocalDate\r\n\r\ndef sapDataArray = request.body  \r\nexchange.setProperty(\"sapRawData\", sapDataArray)\r\n\r\n// Initialize results list in exchange property\r\nexchange.setProperty(\"allMrResults\", [])\r\nexchange.setProperty(\"totalMrCount\", sapDataArray.size())\r\n\r\ndef stripAll = { s -> \r\n    s ? s.toString().replaceFirst(\"^0+\", \"\") : \"\" \r\n}\r\n\r\ndef uomMap = [\r\n    \"PC\": \"Nos\",\r\n    \"KG\": \"Kg\",\r\n    \"ST\": \"Nos\",\r\n    \"M\": \"Nos\"\r\n]\r\n\r\n// Xử lý từng reservation request và tạo danh sách MR\r\ndef allResults = []\r\n\r\nsapDataArray.each { sapData ->\r\n    // Tạo items cho mỗi reservation\r\n    def erpMrItems = sapData.items?.collect { item ->\r\n        [\r\n            item_code: stripAll(item.matnr),\r\n            schedule_date: item.bdter ?: LocalDate.now().toString(),\r\n            qty: item.bdmng?.toString()?.toFloat() ?: 0,\r\n            warehouse: item.umlgo,\r\n            from_warehouse: item.lgort,\r\n            uom: item.meins,\r\n            rate: 0,\r\n            amount: 0,\r\n            cost_center: \"Main - T\",\r\n            production_plan: stripAll(item.wempf)\r\n        ]\r\n    } ?: []\r\n    \r\n    // Lấy giá trị chung từ header và item đầu tiên\r\n    def firstItem = sapData.items ? sapData.items[0] : null\r\n    def commonProductionPlan = firstItem ? stripAll(firstItem.wempf) : \"\"\r\n    def commonScheduleDate = sapData.rsdat ?: LocalDate.now().toString()\r\n    def sourceWarehouse = firstItem ? firstItem.lgort : null\r\n    def targetWarehouse = firstItem ? firstItem.umlgo : null\r\n    \r\n    def mrName = \"MR-\" + commonProductionPlan + \"-\" + stripAll(sapData.rsnum)\r\n\r\n    def mrData = [\r\n        name: mrName,\r\n        material_request_type: \"Material Transfer\",\r\n        company: \"TECOMEN\",\r\n        transaction_date: sapData.rsdat.toString(),\r\n        schedule_date: commonScheduleDate,\r\n        custom_production_plan: commonProductionPlan,\r\n        custom_sap_reservation_id: stripAll(sapData.rsnum),\r\n        set_from_warehouse: sourceWarehouse,\r\n        set_warehouse: targetWarehouse,\r\n        buying_price_list: \"Standard Buying\",\r\n        custom_notify_creator_on_workflow_update: 0,\r\n        items: erpMrItems\r\n    ]\r\n    \r\n    allResults << mrData\r\n}\r\n\r\n// Trả về mảng các MR để xử lý từng cái một\r\nreturn allResults\r\n"
         - log:
             id: log-mr-count
             message: >-
@@ -2135,8 +2028,9 @@
                         - log:
                             id: log-product-response
                             message: >-
-                              PRODUCTION Material Request Response
-                              [${header.CamelHttpResponseCode}]: ${body}
+                              PRODUCTION Material Request Response POST
+                              [${header.CamelHttpResponseCode}]:
+                              ${body}${exchangeProperty.reservationId}
                         - choice:
                             id: choice-prod-submit
                             when:
