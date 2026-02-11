@@ -493,6 +493,13 @@
                           id: simple-staging-docstatus
                           expression: ${body[data][docstatus]}
                   - setProperty:
+                      id: setProperty-670d
+                      name: stgUom
+                      expression:
+                        simple:
+                          id: simple-12e6
+                          expression: ${body[data][po_items][0][stock_uom]}
+                  - setProperty:
                       id: setProperty-0494
                       name: stgName
                       expression:
@@ -638,7 +645,7 @@
                             expression:
                               groovy:
                                 id: groovy-staging-put-wrapper
-                                expression: "def data = request.body\r\ndef existingBomNo = exchange.getProperty(\"stagingExistingBomNo\")\r\ndef existingName = exchange.getProperty(\"stgName\")\r\n// Add bom_no to po_items if exists\r\nif (existingBomNo && existingName && data.po_items && data.po_items.size() > 0) {\r\n    data.po_items[0].bom_no = existingBomNo\r\n    data.po_items[0].name = existingName\r\n}\r\n\r\nreturn [data: data]\r\n"
+                                expression: "def data = request.body\r\ndef existingBomNo = exchange.getProperty(\"stagingExistingBomNo\")\r\ndef existingName = exchange.getProperty(\"stgName\")\r\ndef existingUom = exchange.getProperty(\"stgUom\")\r\n// Add bom_no to po_items if exists\r\nif (existingBomNo && existingUom && existingName && data.po_items && data.po_items.size() > 0) {\r\n    data.po_items[0].bom_no = existingBomNo\r\n    data.po_items[0].name = existingName\r\n    data.po_items[0].stock_uom = existingUom\r\n}\r\n\r\nreturn [data: data]\r\n"
                         - marshal:
                             id: marshal-staging-put-body
                             json:
@@ -722,6 +729,13 @@
                       id: unmarshal-prod-check
                       json:
                         id: json-prod-check-unmarshal
+                  - setProperty:
+                      id: setProperty-e723
+                      name: proUom
+                      expression:
+                        simple:
+                          id: simple-e472
+                          expression: ${body[data][po_items][0][stock_uom]}
                   - setProperty:
                       id: setProperty-prod-docstatus
                       name: prodDocstatus
@@ -874,7 +888,7 @@
                             expression:
                               groovy:
                                 id: groovy-prod-put-wrapper
-                                expression: "def data = request.body\r\ndef existingBomNo = exchange.getProperty(\"prodExistingBomNo\")\r\ndef existingName = exchange.getProperty(\"proName\")\r\n// Add bom_no to po_items if exists\r\nif (existingBomNo && existingName && data.po_items && data.po_items.size() > 0) {\r\n    data.po_items[0].bom_no = existingBomNo\r\n    data.po_items[0].name = existingName\r\n}\r\n\r\nreturn [data: data]\r\n"
+                                expression: "def data = request.body\r\ndef existingBomNo = exchange.getProperty(\"prodExistingBomNo\")\r\ndef existingName = exchange.getProperty(\"proName\")\r\ndef existingUom = exchange.getProperty(\"proUom\")\r\n\r\n// Add bom_no to po_items if exists\r\nif (existingBomNo && existingUom && existingName && data.po_items && data.po_items.size() > 0) {\r\n    data.po_items[0].bom_no = existingBomNo\r\n    data.po_items[0].name = existingName\r\n    data.po_items[0].stock_uom = existingUom\r\n}\r\n\r\nreturn [data: data]\r\n"
                         - marshal:
                             id: marshal-prod-put-body
                             json:
