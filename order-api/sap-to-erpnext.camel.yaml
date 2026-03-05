@@ -486,6 +486,13 @@
                       json:
                         id: json-staging-check-unmarshal
                   - setProperty:
+                      id: setProperty-1f5d
+                      name: stg_sap_bom_no
+                      expression:
+                        simple:
+                          id: simple-e169
+                          expression: ${body[data][po_items][0][custom_sap_bom_no]}
+                  - setProperty:
                       id: setProperty-staging-docstatus
                       name: stagingDocstatus
                       expression:
@@ -645,7 +652,7 @@
                             expression:
                               groovy:
                                 id: groovy-staging-put-wrapper
-                                expression: "def data = request.body\r\ndef existingBomNo = exchange.getProperty(\"stagingExistingBomNo\")\r\ndef existingName = exchange.getProperty(\"stgName\")\r\ndef existingUom = exchange.getProperty(\"stgUom\")\r\n// Add bom_no to po_items if exists\r\nif (existingBomNo && existingUom && existingName && data.po_items && data.po_items.size() > 0) {\r\n    data.po_items[0].bom_no = existingBomNo\r\n    data.po_items[0].name = existingName\r\n    data.po_items[0].stock_uom = existingUom\r\n}\r\n\r\nreturn [data: data]\r\n"
+                                expression: "def data = request.body\r\ndef existingBomNo = exchange.getProperty(\"stagingExistingBomNo\")\r\ndef existingName = exchange.getProperty(\"stgName\")\r\ndef existingUom = exchange.getProperty(\"stgUom\")\r\ndef existingSapBomNo = exchange.getProperty(\"stg_sap_bom_no\")\r\n\r\n\r\n// Bước 1: Luôn kiểm tra cấu trúc mảng po_items trước để tránh lỗi Null/Index\r\nif (data.po_items && data.po_items.size() > 0) {\r\n    def firstItem = data.po_items[0]\r\n\r\n    // Bước 2: Tách riêng từng trường, cái nào có dữ liệu cũ thì mới ghi đè/gán vào\r\n    if (existingBomNo) {\r\n        firstItem.bom_no = existingBomNo\r\n    }\r\n    \r\n    if (existingName) {\r\n        firstItem.name = existingName\r\n    }\r\n    \r\n    if (existingUom) {\r\n        firstItem.stock_uom = existingUom\r\n    }\r\n\r\n    if (existingSapBomNo) {\r\n        firstItem.custom_sap_bom_no = existingSapBomNo\r\n    }\r\n}\r\n\r\n// Bước 3: Trả về object bọc trong key 'data' theo đúng chuẩn ERPNext API\r\nreturn [data: data]"
                         - marshal:
                             id: marshal-staging-put-body
                             json:
@@ -729,6 +736,13 @@
                       id: unmarshal-prod-check
                       json:
                         id: json-prod-check-unmarshal
+                  - setProperty:
+                      id: setProperty-fdda
+                      name: pro_sap_bom_no
+                      expression:
+                        simple:
+                          id: simple-12e1
+                          expression: ${body[data][po_items][0][custom_sap_bom_no]}
                   - setProperty:
                       id: setProperty-e723
                       name: proUom
@@ -888,7 +902,7 @@
                             expression:
                               groovy:
                                 id: groovy-prod-put-wrapper
-                                expression: "def data = request.body\r\ndef existingBomNo = exchange.getProperty(\"prodExistingBomNo\")\r\ndef existingName = exchange.getProperty(\"proName\")\r\ndef existingUom = exchange.getProperty(\"proUom\")\r\n\r\n// Add bom_no to po_items if exists\r\nif (existingBomNo && existingUom && existingName && data.po_items && data.po_items.size() > 0) {\r\n    data.po_items[0].bom_no = existingBomNo\r\n    data.po_items[0].name = existingName\r\n    data.po_items[0].stock_uom = existingUom\r\n}\r\n\r\nreturn [data: data]\r\n"
+                                expression: "def data = request.body\r\ndef existingBomNo = exchange.getProperty(\"prodExistingBomNo\")\r\ndef existingName = exchange.getProperty(\"proName\")\r\ndef existingUom = exchange.getProperty(\"proUom\")\r\ndef existingSapBomNo = exchange.getProperty(\"pro_sap_bom_no\")\r\n\r\n// Bước 1: Kiểm tra xem mảng po_items có phần tử nào không\r\nif (data.po_items && data.po_items.size() > 0) {\r\n    def firstItem = data.po_items[0]\r\n\r\n    // Bước 2: Kiểm tra từng biến, có giá trị mới gán\r\n    if (existingBomNo) firstItem.bom_no = existingBomNo\r\n    if (existingName) firstItem.name = existingName\r\n    if (existingUom) firstItem.stock_uom = existingUom\r\n    if (existingSapBomNo) firstItem.custom_sap_bom_no = existingSapBomNo\r\n}\r\n\r\nreturn [data: data]"
                         - marshal:
                             id: marshal-prod-put-body
                             json:
@@ -967,7 +981,7 @@
             expression:
               groovy:
                 id: groovy-f94e
-                expression: "import java.time.LocalDate\r\n\r\ndef sapDataArray = request.body  \r\nexchange.setProperty(\"sapRawData\", sapDataArray)\r\n\r\n// Initialize results list in exchange property\r\nexchange.setProperty(\"allMrResults\", [])\r\nexchange.setProperty(\"totalMrCount\", sapDataArray.size())\r\n\r\ndef stripAll = { s -> \r\n    s ? s.toString().replaceFirst(\"^0+\", \"\") : \"\" \r\n}\r\n\r\ndef uomMap = [\r\n    \"PC\": \"Nos\",\r\n    \"KG\": \"Kg\",\r\n    \"ST\": \"Nos\",\r\n    \"M\": \"Nos\"\r\n]\r\n\r\n// Xử lý từng reservation request và tạo danh sách MR\r\ndef allResults = []\r\n\r\nsapDataArray.each { sapData ->\r\n    // Tạo items cho mỗi reservation\r\n    def erpMrItems = sapData.items?.collect { item ->\r\n        [\r\n            item_code: stripAll(item.matnr),\r\n            schedule_date: item.bdter ?: LocalDate.now().toString(),\r\n            qty: item.bdmng?.toString()?.toFloat() ?: 0,\r\n            warehouse: item.umlgo,\r\n            from_warehouse: item.lgort,\r\n            uom: item.meins,\r\n            rate: 0,\r\n            amount: 0,\r\n            cost_center: \"Main - T\",\r\n            production_plan: stripAll(item.wempf)\r\n        ]\r\n    } ?: []\r\n    \r\n    // Lấy giá trị chung từ header và item đầu tiên\r\n    def firstItem = sapData.items ? sapData.items[0] : null\r\n    def commonProductionPlan = firstItem ? stripAll(firstItem.wempf) : \"\"\r\n    def commonScheduleDate = sapData.rsdat ?: LocalDate.now().toString()\r\n    def sourceWarehouse = firstItem ? firstItem.lgort : null\r\n    def targetWarehouse = firstItem ? firstItem.umlgo : null\r\n    \r\n    def mrName = \"MR-\" + commonProductionPlan + \"-\" + stripAll(sapData.rsnum)\r\n\r\n    def mrData = [\r\n        name: mrName,\r\n        material_request_type: \"Material Transfer\",\r\n        company: \"TECOMEN\",\r\n        transaction_date: sapData.rsdat.toString(),\r\n        schedule_date: commonScheduleDate,\r\n        custom_production_plan: commonProductionPlan,\r\n        custom_sap_reservation_id: stripAll(sapData.rsnum),\r\n        set_from_warehouse: sourceWarehouse,\r\n        set_warehouse: targetWarehouse,\r\n        buying_price_list: \"Standard Buying\",\r\n        custom_notify_creator_on_workflow_update: 0,\r\n        items: erpMrItems\r\n    ]\r\n    \r\n    allResults << mrData\r\n}\r\n\r\n// Trả về mảng các MR để xử lý từng cái một\r\nreturn allResults\r\n"
+                expression: "import java.time.LocalDate\r\n\r\ndef sapDataArray = request.body\r\ndef filteredData = sapDataArray.findAll { it.transactionsource == \"ZPP703\" }\r\n\r\nexchange.setProperty(\"sapRawData\", filteredData)\r\n\r\nexchange.setProperty(\"allMrResults\", [])\r\nexchange.setProperty(\"totalMrCount\", filteredData.size())\r\n\r\ndef stripAll = { s ->\r\n    s ? s.toString().replaceFirst(\"^0+\", \"\") : \"\"\r\n}\r\n\r\ndef allResults = []\r\n\r\nfilteredData.each { sapData ->\r\n    def erpMrItems = sapData.items?.collect { item ->\r\n        [\r\n            item_code: stripAll(item.matnr),\r\n            schedule_date: item.bdter ?: LocalDate.now().toString(),\r\n            qty: item.bdmng?.toString()?.toFloat() ?: 0,\r\n            warehouse: item.umlgo,\r\n            from_warehouse: item.lgort,\r\n            uom: item.meins,\r\n            rate: 0,\r\n            amount: 0,\r\n            cost_center: \"Main - T\",\r\n            production_plan: stripAll(item.wempf)\r\n        ]\r\n    } ?: []\r\n\r\n    def firstItem = sapData.items ? sapData.items[0] : null\r\n    def commonProductionPlan = firstItem ? stripAll(firstItem.wempf) : \"\"\r\n    def commonScheduleDate = sapData.rsdat ?: LocalDate.now().toString()\r\n    def sourceWarehouse = firstItem ? firstItem.lgort : null\r\n    def targetWarehouse = firstItem ? firstItem.umlgo : null\r\n\r\n    def mrName = \"MR-\" + commonProductionPlan + \"-\" + stripAll(sapData.rsnum)\r\n\r\n    def mrData = [\r\n        name: mrName,\r\n        material_request_type: \"Material Transfer\",\r\n        company: \"TECOMEN\",\r\n        transaction_date: sapData.rsdat.toString(),\r\n        schedule_date: commonScheduleDate,\r\n        custom_production_plan: commonProductionPlan,\r\n        custom_sap_reservation_id: stripAll(sapData.rsnum),\r\n        set_from_warehouse: sourceWarehouse,\r\n        set_warehouse: targetWarehouse,\r\n        buying_price_list: \"Standard Buying\",\r\n        custom_notify_creator_on_workflow_update: 0,\r\n        items: erpMrItems\r\n    ]\r\n\r\n    allResults << mrData\r\n}\r\n\r\nreturn allResults\r\n"
         - log:
             id: log-mr-count
             message: >-
@@ -996,6 +1010,13 @@
                     simple:
                       id: simple-reservation-id
                       expression: ${body[custom_sap_reservation_id]}
+              - setProperty:
+                  id: setProperty-mr-name
+                  name: mrName
+                  expression:
+                    simple:
+                      id: simple-mr-name
+                      expression: ${body[name]}
               - marshal:
                   id: marshal-current-mr
                   json:
@@ -1030,11 +1051,6 @@
                         constant:
                           id: constant-check-stg-method
                           expression: GET
-              - log:
-                  id: log-check-stg-existing
-                  message: >-
-                    Checking existing MR in STAGING for reservation_id:
-                    ${exchangeProperty.reservationId}
               - setHeader:
                   id: setHeader-filter-query-stg
                   name: CamelHttpQuery
@@ -1043,18 +1059,16 @@
                       id: simple-c472
                       expression: >-
                         filters=[["docstatus","!=",2],["custom_sap_reservation_id","=","${exchangeProperty.reservationId}"]]
+              - log:
+                  id: log-check-stg-existing
+                  message: >-
+                    Checking existing MR in STAGING for reservation_id:
+                    ${exchangeProperty.reservationId}
               - toD:
                   id: toD-check-stg-existing
                   uri: >-
                     https://{{erpnext.staging.url}}/api/resource/Material
                     Request?bridgeEndpoint=true&throwExceptionOnFailure=false
-              - setProperty:
-                  id: setProperty-check-stg-response
-                  name: checkStgResponse
-                  expression:
-                    simple:
-                      id: simple-check-stg-response
-                      expression: ${body}
               - setProperty:
                   id: setProperty-check-stg-code
                   name: checkStgCode
@@ -1318,11 +1332,6 @@
                         constant:
                           id: constant-check-prod-method
                           expression: GET
-              - log:
-                  id: log-check-prod-existing
-                  message: >-
-                    Checking existing MR in PRODUCTION for reservation_id:
-                    ${exchangeProperty.reservationId}
               - setHeader:
                   id: setHeader-filter-query-prod
                   name: CamelHttpQuery
@@ -1331,18 +1340,16 @@
                       id: simple-filter-query-prod
                       expression: >-
                         filters=[["docstatus","!=",2],["custom_sap_reservation_id","=","${exchangeProperty.reservationId}"]]
+              - log:
+                  id: log-check-prod-existing
+                  message: >-
+                    Checking existing MR in PRODUCTION for reservation_id:
+                    ${exchangeProperty.reservationId}
               - toD:
                   id: toD-check-prod-existing
                   uri: >-
                     https://{{erpnext.production.url}}/api/resource/Material
                     Request?bridgeEndpoint=true&throwExceptionOnFailure=false
-              - setProperty:
-                  id: setProperty-check-prod-response
-                  name: checkProdResponse
-                  expression:
-                    simple:
-                      id: simple-check-prod-response
-                      expression: ${body}
               - setProperty:
                   id: setProperty-check-prod-code
                   name: checkProdCode
@@ -1421,6 +1428,38 @@
                                                 mr_name: exchange.getProperty("existingProdMrName")
                                               ]
                                             }
+                                  - setHeaders:
+                                      id: setHeaders-mr-exists-log
+                                      headers:
+                                        - id: setHeader-sql-exists-mr-name
+                                          name: sql_mr_name
+                                          expression:
+                                            simple:
+                                              id: simple-sql-exists-mr-name
+                                              expression: ${exchangeProperty.existingProdMrName}
+                                        - id: setHeader-sql-exists-res-id
+                                          name: sql_reservation_id
+                                          expression:
+                                            simple:
+                                              id: simple-sql-exists-res-id
+                                              expression: ${exchangeProperty.reservationId}
+                                  - to:
+                                      id: to-db-log-mr-exists
+                                      uri: sql
+                                      parameters:
+                                        dataSource: "#sapLogDataSource"
+                                        query: >-
+                                          INSERT INTO material_request_response
+                                          (mr_name, reservation_id,
+                                          operation_type, response_body) VALUES
+                                          (:#sql_mr_name, :#sql_reservation_id,
+                                          'exists', CAST('{"message": "Material
+                                          Request already exists"}' AS jsonb))
+                                  - log:
+                                      id: log-db-mr-exists
+                                      message: >-
+                                        Logged MR exists to DB:
+                                        ${exchangeProperty.existingProdMrName}
                             otherwise:
                               id: otherwise-prod-not-exists
                               steps:
@@ -1460,6 +1499,103 @@
                           id: simple-should-create-prod
                           expression: ${exchangeProperty.skipProdCreation} == 'false'
                       steps:
+                        - setProperty:
+                            id: setProperty-mr-db-data
+                            name: mrDbData
+                            expression:
+                              groovy:
+                                id: groovy-mr-db-prep
+                                expression: "import groovy.json.JsonBuilder\r\ndef mr = exchange.getProperty(\"currentMR\") \r\ndef sapRaw = exchange.getProperty(\"sapRawData\")\r\nreturn [\r\n  mr_name: mr.name,\r\n  reservation_id: mr.custom_sap_reservation_id,\r\n  production_plan: mr.custom_production_plan,\r\n  transaction_date: mr.transaction_date,\r\n  schedule_date: mr.schedule_date,\r\n  source_warehouse: mr.set_from_warehouse,\r\n  target_warehouse: mr.set_warehouse,\r\n  sap_raw: new JsonBuilder(sapRaw).toString(),\r\n  erp_payload: new JsonBuilder(mr).toString()\r\n]\r\n"
+                        - setHeaders:
+                            id: setHeaders-mr-log-data
+                            headers:
+                              - id: setHeader-sql-mr-name
+                                name: sql_mr_name
+                                expression:
+                                  simple:
+                                    id: simple-sql-mr-name
+                                    expression: ${exchangeProperty.mrDbData[mr_name]}
+                              - id: setHeader-sql-res-id
+                                name: sql_reservation_id
+                                expression:
+                                  simple:
+                                    id: simple-sql-res-id
+                                    expression: >-
+                                      ${exchangeProperty.mrDbData[reservation_id]}
+                              - id: setHeader-sql-prod-plan
+                                name: sql_production_plan
+                                expression:
+                                  simple:
+                                    id: simple-sql-prod-plan
+                                    expression: >-
+                                      ${exchangeProperty.mrDbData[production_plan]}
+                              - id: setHeader-sql-tx-date
+                                name: sql_transaction_date
+                                expression:
+                                  simple:
+                                    id: simple-sql-tx-date
+                                    expression: >-
+                                      ${exchangeProperty.mrDbData[transaction_date]}
+                              - id: setHeader-sql-sched-date
+                                name: sql_schedule_date
+                                expression:
+                                  simple:
+                                    id: simple-sql-sched-date
+                                    expression: >-
+                                      ${exchangeProperty.mrDbData[schedule_date]}
+                              - id: setHeader-sql-src-wh
+                                name: sql_source_warehouse
+                                expression:
+                                  simple:
+                                    id: simple-sql-src-wh
+                                    expression: >-
+                                      ${exchangeProperty.mrDbData[source_warehouse]}
+                              - id: setHeader-sql-tgt-wh
+                                name: sql_target_warehouse
+                                expression:
+                                  simple:
+                                    id: simple-sql-tgt-wh
+                                    expression: >-
+                                      ${exchangeProperty.mrDbData[target_warehouse]}
+                              - id: setHeader-sql-sap-raw
+                                name: sql_sap_raw
+                                expression:
+                                  simple:
+                                    id: simple-sql-sap-raw
+                                    expression: ${exchangeProperty.mrDbData[sap_raw]}
+                              - id: setHeader-sql-erp-payload
+                                name: sql_erp_payload
+                                expression:
+                                  simple:
+                                    id: simple-sql-erp-payload
+                                    expression: ${exchangeProperty.mrDbData[erp_payload]}
+                        - to:
+                            id: to-db-insert-mr-data
+                            uri: sql
+                            parameters:
+                              dataSource: "#sapLogDataSource"
+                              query: >-
+                                INSERT INTO sap_material_request_log (mr_name,
+                                reservation_id, production_plan,
+                                transaction_date, schedule_date,
+                                source_warehouse, target_warehouse,
+                                sap_raw_data, erpnext_payload) VALUES
+                                (:#sql_mr_name, :#sql_reservation_id,
+                                :#sql_production_plan,
+                                CAST(:#sql_transaction_date AS date),
+                                CAST(:#sql_schedule_date AS date),
+                                :#sql_source_warehouse, :#sql_target_warehouse,
+                                CAST(:#sql_sap_raw AS
+                                jsonb),CAST(:#sql_erp_payload AS jsonb)) ON
+                                CONFLICT (mr_name) DO UPDATE SET sap_raw_data =
+                                EXCLUDED.sap_raw_data, erpnext_payload =
+                                EXCLUDED.erpnext_payload, updated_at =
+                                CURRENT_TIMESTAMP
+                        - log:
+                            id: log-db-mr-saved
+                            message: >-
+                              Saved MR data to DB:
+                              ${exchangeProperty.reservationId}
                         - removeHeaders:
                             id: removeHeaders-before-product
                             pattern: "*"
@@ -1520,8 +1656,8 @@
                             id: log-product-response
                             message: >-
                               PRODUCTION Material Request Response POST
-                              [${header.CamelHttpResponseCode}]:
-                              ${body}${exchangeProperty.reservationId}
+                              [${header.CamelHttpResponseCode}]: ${body} |
+                              reservation_id: ${exchangeProperty.reservationId}
                         - choice:
                             id: choice-prod-submit
                             when:
@@ -1607,6 +1743,78 @@
                                                 mr_name: exchange.getProperty("mrProdName")
                                               ]
                                             }
+                                  - setBody:
+                                      id: setBody-mr-success-resp
+                                      expression:
+                                        simple:
+                                          id: simple-mr-success-resp
+                                          expression: ${exchangeProperty.mrProdResponse}
+                                  - convertBodyTo:
+                                      id: convertBodyTo-mr-success-resp
+                                      type: java.lang.String
+                                  - setHeader:
+                                      id: setHeader-sql-mr-success-body
+                                      name: sql_res_body
+                                      expression:
+                                        simple:
+                                          id: simple-sql-mr-success-body
+                                          expression: ${body}
+                                  - setBody:
+                                      id: setBody-mr-success-req
+                                      expression:
+                                        simple:
+                                          id: simple-mr-success-req
+                                          expression: ${exchangeProperty.mrJson}
+                                  - convertBodyTo:
+                                      id: convertBodyTo-mr-success-req
+                                      type: java.lang.String
+                                  - setHeader:
+                                      id: setHeader-sql-mr-success-req
+                                      name: sql_res_req
+                                      expression:
+                                        simple:
+                                          id: simple-sql-mr-success-req
+                                          expression: ${body}
+                                  - setHeaders:
+                                      id: setHeaders-mr-success-log
+                                      headers:
+                                        - id: setHeader-sql-success-mr-name
+                                          name: sql_mr_name
+                                          expression:
+                                            simple:
+                                              id: simple-sql-success-mr-name
+                                              expression: ${exchangeProperty.mrProdName}
+                                        - id: setHeader-sql-success-res-id
+                                          name: sql_reservation_id
+                                          expression:
+                                            simple:
+                                              id: simple-sql-success-res-id
+                                              expression: ${exchangeProperty.reservationId}
+                                        - id: setHeader-sql-success-code
+                                          name: sql_http_code
+                                          expression:
+                                            simple:
+                                              id: simple-sql-success-code
+                                              expression: ${exchangeProperty.mrProdCode}
+                                  - to:
+                                      id: to-db-log-mr-success
+                                      uri: sql
+                                      parameters:
+                                        dataSource: "#sapLogDataSource"
+                                        query: >-
+                                          INSERT INTO material_request_response
+                                          (mr_name, reservation_id,
+                                          operation_type, http_status_code,
+                                          response_body, request_payload) VALUES
+                                          (:#sql_mr_name, :#sql_reservation_id,
+                                          'created', :#sql_http_code,
+                                          CAST(:#sql_res_body AS jsonb),
+                                          CAST(:#sql_res_req AS jsonb))
+                                  - log:
+                                      id: log-db-mr-success
+                                      message: >-
+                                        Logged MR success to DB:
+                                        ${exchangeProperty.mrProdName}
                             otherwise:
                               id: otherwise-product-failed
                               steps:
@@ -1632,6 +1840,73 @@
                                               error: exchange.getProperty("mrProdResponse")
                                             ]
                                           }
+                                - setBody:
+                                    id: setBody-mr-failed-resp
+                                    expression:
+                                      simple:
+                                        id: simple-mr-failed-resp
+                                        expression: ${exchangeProperty.mrProdResponse}
+                                - convertBodyTo:
+                                    id: convertBodyTo-mr-failed-resp
+                                    type: java.lang.String
+                                - setHeader:
+                                    id: setHeader-sql-mr-failed-body
+                                    name: sql_res_body
+                                    expression:
+                                      simple:
+                                        id: simple-sql-mr-failed-body
+                                        expression: ${body}
+                                - setBody:
+                                    id: setBody-mr-failed-req
+                                    expression:
+                                      simple:
+                                        id: simple-mr-failed-req
+                                        expression: ${exchangeProperty.mrJson}
+                                - convertBodyTo:
+                                    id: convertBodyTo-mr-failed-req
+                                    type: java.lang.String
+                                - setHeader:
+                                    id: setHeader-sql-mr-failed-req
+                                    name: sql_res_req
+                                    expression:
+                                      simple:
+                                        id: simple-sql-mr-failed-req
+                                        expression: ${body}
+                                - setHeaders:
+                                    id: setHeaders-mr-failed-log
+                                    headers:
+                                      - id: setHeader-sql-failed-res-id
+                                        name: sql_reservation_id
+                                        expression:
+                                          simple:
+                                            id: simple-sql-failed-res-id
+                                            expression: ${exchangeProperty.reservationId}
+                                      - id: setHeader-sql-failed-code
+                                        name: sql_http_code
+                                        expression:
+                                          simple:
+                                            id: simple-sql-failed-code
+                                            expression: ${exchangeProperty.mrProdCode}
+                                - to:
+                                    id: to-db-log-mr-failed
+                                    uri: sql
+                                    parameters:
+                                      dataSource: "#sapLogDataSource"
+                                      query: >-
+                                        INSERT INTO material_request_response
+                                        (reservation_id, operation_type,
+                                        http_status_code, response_body,
+                                        request_payload, error_message) VALUES
+                                        (:#sql_reservation_id, 'failed',
+                                        :#sql_http_code, CAST(:#sql_res_body AS
+                                        jsonb), CAST(:#sql_res_req AS jsonb),
+                                        'Material Request creation failed in
+                                        PRODUCTION')
+                                - log:
+                                    id: log-db-mr-failed
+                                    message: >-
+                                      Logged MR failed to DB:
+                                      ${exchangeProperty.reservationId}
                   otherwise:
                     id: otherwise-skip-prod-creation
                     steps:
@@ -1648,6 +1923,7 @@
                 expression: |
                   def results = exchange.getProperty("allMrResults")
                   return [
+                    status: "success",
                     total: results.size(),
                     processed: exchange.getProperty("totalMrCount"),
                     results: results
@@ -1657,7 +1933,7 @@
             json:
               id: json-final-response
         - setHeader:
-            id: setHeader-final-contentsss
+            id: setHeader-final-contentt
             name: Content-Type
             expression:
               constant:
@@ -1711,3 +1987,13 @@
         - log:
             id: log-stock-entry-final
             message: "Stock Entry response: ${body}"
+- beans:
+    - name: sapLogDataSource
+      type: com.zaxxer.hikari.HikariDataSource
+      properties:
+        jdbcUrl: "{{database.url}}"
+        username: "{{database.username}}"
+        password: "{{database.password}}"
+        driverClassName: org.postgresql.Driver
+        maximumPoolSize: 10
+        poolName: SapLogDBPool
